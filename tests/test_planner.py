@@ -87,9 +87,10 @@ def test_planner_rejects_invalid_model_output(monkeypatch):
 def test_planner_rejects_missing_required_steps(monkeypatch):
     bad = valid_plan()
     bad["implementation_steps"] = []
-    monkeypatch.setattr(
-        "ai_worker.planner.urlopen",
-        lambda request, timeout: FakeResponse({"message": {"content": json.dumps(bad)}}),
-    )
+    class FakeOpener:
+        def open(self, request, timeout):
+            return FakeResponse({"message": {"content": json.dumps(bad)}})
+
+    monkeypatch.setattr("ai_worker.planner.build_opener", lambda handler: FakeOpener())
     with pytest.raises(OllamaError):
         plan_github_issue(brief())
