@@ -1,0 +1,39 @@
+name: opportunity-scan
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+permissions:
+  contents: read
+concurrency:
+  group: ai-worker-opportunity-scan
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Restore recent SQLite opportunity ledger
+        uses: actions/cache@v4
+        with:
+          path: data/ai_worker.sqlite3
+          key: ai-worker-ledger-\${{ github.run_id }}
+          restore-keys: |
+            ai-worker-ledger-
+      - name: Install AI-Worker
+        run: python -m pip install .
+      - name: Scan public bounty feed
+        run: ai-worker scan --limit 1000 --db data/ai_worker.sqlite3 --output reports/latest.md
+      - name: Publish scan report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opportunity-scan-\${{ github.run_id }}
+          path: |
+            reports/latest.md
+            data/ai_worker.sqlite3
+          if-no-files-found: error
+          retention-days: 14
