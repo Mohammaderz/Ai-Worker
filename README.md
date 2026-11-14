@@ -8,17 +8,23 @@ Safety-first agent-work pipeline. v0.2 discovers paid software tasks, applies st
 - Requires an explicitly escrowed reward and B-grade-or-better public payout evidence.
 - Rejects closed/expired tasks, unsafe links, malformed expiry data, missing acceptance criteria, and risky categories.
 - Ranks candidates and writes a Markdown shortlist.
+- Includes a disposable Docker runner baseline with no network, no capabilities, a read-only root filesystem, resource limits and no host secrets.
 - Does not claim gigs, bid, message clients, publish PRs, sign transactions, or spend money.
 
 Jobbi is an index, not the payer. Verify original-board terms, claim process, acceptance criteria, and payout conditions. A listed or escrowed reward is not the same as money received.
 
 ## Run on macOS (Python 3.11+)
-```bash
+\`\`\`bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 pytest -q
 ai-worker scan
-```
+\`\`\`
 
-Daily $5-$10 is a target, not a guarantee. Future coding and delivery agents will work in isolated environments and require human approval before external actions. See docs/ARCHITECTURE.md.
+## Build the sandbox image
+\`\`\`bash
+docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+\`\`\`
+
+Daily $5-$10 is a target, not a guarantee. The coding agent and task orchestration are still being built. See docs/ARCHITECTURE.md and sandbox/README.md.
