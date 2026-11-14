@@ -138,9 +138,9 @@ def run_pipeline(
             compile_code = tests_code = None
             tests_detected = False
             compile_log = tests_log = ""
-        elif proposal.questions or task_plan.blockers or task_plan.risk_level == "high":
+        elif proposal.questions or task_plan.blockers or not task_plan.acceptance_checklist or task_plan.risk_level == "high":
             status = "blocked_for_human_review"
-            message = "The plan has unresolved questions, blockers or high risk. The proposed diff was saved but not applied."
+            message = "The plan has unresolved questions, blockers, missing acceptance checks or high risk. The proposed diff was saved but not applied."
             compile_code = tests_code = None
             tests_detected = False
             compile_log = tests_log = ""
