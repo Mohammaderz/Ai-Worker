@@ -10,6 +10,9 @@
 
 The current qualification threshold is deliberately strict: USD/USDC, at least the configured reward minimum, B-grade-or-better payout evidence, and an explicitly escrowed reward. This reduces candidate volume; it does not guarantee acceptance or payment.
 
+## Read-only task research
+The inspect command supports canonical public GitHub issue URLs only. It fetches issue title, state, body, labels and update time through the public GitHub API. It does not follow links in issue text, execute issue instructions, or post comments. Other boards and URL formats remain manual-review-only until dedicated adapters are added.
+
 ## Isolated execution baseline
 The repository includes a Docker runner that executes an argv command inside a disposable task workspace. It disables networking, drops Linux capabilities, uses a non-root UID, makes the container root filesystem read-only, applies PID/CPU/memory/time limits, and mounts only the task workspace writable. It does not forward host environment variables or credentials. See sandbox/README.md.
 
