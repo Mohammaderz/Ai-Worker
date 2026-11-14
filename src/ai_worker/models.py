@@ -16,6 +16,7 @@ class Gig:
     payment_state: str = ""
     payment_rail: str = ""
     acceptance: str = ""
+    acceptance_type: str = ""
     expires: str = ""
     claims_open: bool | None = None
     source: str = ""
@@ -52,6 +53,7 @@ class Gig:
             payment_state=str(meta.get("payment_state") or "").lower(),
             payment_rail=str(reward.get("rail") or ""),
             acceptance=str(meta.get("acceptance") or ""),
+            acceptance_type=str(meta.get("acceptance_type") or ""),
             expires=str(meta.get("expires") or ""),
             claims_open=claims_open,
             source=str(meta.get("source") or ""),
