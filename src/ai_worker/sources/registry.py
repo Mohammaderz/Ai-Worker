@@ -39,6 +39,10 @@ INDEXED_SOURCES: dict[str, SourceInfo] = {
     "rentahuman": SourceInfo("rentahuman", "RentAHuman", "jobbi_feed", "active", "Human-work lane only; excluded from autonomous execution."),
 }
 
+DIRECT_API_SOURCES: dict[str, SourceInfo] = {
+    "trybounty": SourceInfo("trybounty", "Bounty", "official_agent_api", "api_key_required", "Official read-only Agent API. Requires an Agent API key; the platform documents no deposit, subscription, or API access fee.", "https://trybounty.ai/"),
+}
+
 MANUAL_ONLY_SOURCES: dict[str, SourceInfo] = {
     "gitcoin": SourceInfo("gitcoin", "Gitcoin", "manual_link", "manual_only", "Legacy cGrants bounty program sunset in 2023; Buidlbox is the successor route for hackathons and bounties.", "https://gitcoin.co/"),
     "buidlbox": SourceInfo("buidlbox", "Buidlbox", "manual_link", "manual_only", "No verified contributor search API adapter configured."),
@@ -96,6 +100,7 @@ def source_report(gigs: Iterable[Gig]) -> dict:
             "note": "One feed request indexes multiple boards; Jobbi is an index, not the payer.",
         },
         "indexed_sources_observed": indexed,
+        "direct_api_sources": [asdict(item) for item in DIRECT_API_SOURCES.values()],
         "manual_only_sources": manual,
         "total_indexed_gigs": len(items),
         "execution_boundary": "Only canonical public github.com/OWNER/REPO/issues/NUMBER URLs are supported by the current coding pipeline. This is a URL capability, not a promise that a task will be accepted or paid.",
