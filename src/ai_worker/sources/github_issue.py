@@ -94,7 +94,14 @@ def inspect_github_issue(url: str, timeout: int = 15) -> ResearchBrief:
         raise GitHubIssueError("This URL resolves to a pull request; only issues are supported")
     returned_url = data.get("html_url") or url
     parsed_returned = urlsplit(returned_url)
-    if parsed_returned.scheme != "https" or parsed_returned.hostname != "github.com":
+    expected_path = f"/{owner}/{repository}/issues/{number}"
+    if (
+        parsed_returned.scheme != "https"
+        or parsed_returned.hostname != "github.com"
+        or parsed_returned.path.rstrip("/") != expected_path
+        or parsed_returned.query
+        or parsed_returned.fragment
+    ):
         raise GitHubIssueError("GitHub API returned a non-canonical issue URL")
 
     labels = data.get("labels") or []
