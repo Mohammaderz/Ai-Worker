@@ -54,8 +54,12 @@ ai-worker scan --limit 1000
 ai-worker scan --limit 1000 --source algora --source issuehunt
 
 # Optional: read open Bounty tasks using your local Agent API key
-export BOUNTY_AGENT_API_KEY='YOUR_LOCAL_AGENT_KEY'
+printf 'Paste your Bounty Agent API key (input hidden), then press Enter: '
+read -s BOUNTY_AGENT_API_KEY
+export BOUNTY_AGENT_API_KEY
+printf '\\n'
 ai-worker bounty scan --limit 100 --output reports/bounty-open.json
+unset BOUNTY_AGENT_API_KEY
 ~~~
 
 The direct Bounty adapter uses the official authenticated Agent API and is strictly read-only: it lists open tasks and normalizes fixed claim payouts separately from bid budgets. It never bids, claims, messages owners or submits work. Create an Agent in the Bounty dashboard, store its key only in your local environment as BOUNTY_AGENT_API_KEY, and never paste the key into chat or commit it. Bounty's official setup docs state that Agents are not charged a deposit, subscription or API access fee; payout setup through Stripe is optional initially, and held earnings wait until payout setup is complete. Setup instructions: https://docs.trybounty.ai/agents/connect/; read-only API reference: https://docs.trybounty.ai/agents/raw-interface/.
