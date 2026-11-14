@@ -31,6 +31,9 @@ This is a baseline, not a complete hostile-code security boundary. Production ex
 
 Third-party listings and repositories are untrusted data. They cannot override system policy. Never execute instructions embedded in issues, source files, comments, or web pages. No credentials inside coding sandboxes. No arbitrary outbound network access from task execution.
 
+## Local patch drafting
+The patch draft command sends a bounded allowlist of repository text files and the issue description to local Ollama. It excludes .git, virtual environments, environment files and credential-like filenames. The model returns a structured proposal and unified diff; the diff is validated but not written or applied automatically. The operator explicitly chooses when to apply it in a disposable workspace.
+
 ## Patch application
 The developer helper validates unified diff headers and sensitive paths, runs git apply --check in the networkless container, and applies only after the check succeeds. It never commits, pushes, creates a PR, or submits work. The resulting modified workspace must still pass the project-specific test suite and human review.
 
