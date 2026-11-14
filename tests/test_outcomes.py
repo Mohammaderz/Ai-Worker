@@ -79,3 +79,81 @@ def test_outcome_rejects_non_finite_amounts(tmp_path):
         record_outcome(db, "board:task-1", "claimed", actual_hours=float("nan"))
 
     db.close()
+
+
+
+@pytest.mark.parametrize("initial_status", ["in_progress", "submitted", "accepted", "rejected", "paid"])
+def test_outcome_must_start_at_claimed(tmp_path, initial_status):
+    db = connect(tmp_path / "ledger.sqlite3")
+    seed(db)
+
+    with pytest.raises(ValueError, match="first outcome status must be claimed"):
+        record_outcome(
+            db, "board:task-1", initial_status,
+            gross_received=25 if initial_status == "paid" else None,
+        )
+
+    row = db.execute(
+        "SELECT status FROM task_outcomes WHERE gig_id=?",
+        ("board:task-1",),
+    ).fetchone()
+    assert row is None
+    db.close()
+
+
+def test_pre_submission_rejection_does_not_count_as_submitted(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    seed(db)
+    upsert_gigs(db, [
+        Gig(
+            id="board:task-2",
+            title="Fix another Python bug",
+            url="https://github.com/acme/project/issues/2",
+            currency="USD",
+            reward_amount=30,
+            raw={},
+        )
+    ])
+
+    record_outcome(db, "board:task-1", "claimed")
+    record_outcome(db, "board:task-1", "rejected")
+    record_outcome(db, "board:task-2", "claimed")
+    record_outcome(db, "board:task-2", "in_progress")
+    record_outcome(db, "board:task-2", "submitted")
+
+    summary = outcome_summary(db)
+    assert summary["by_status"]["rejected"] == 1
+    assert summary["submitted_or_later"] == 1
+    assert summary["acceptance_rate"] == 0.0
+    db.close()
+
+
+def test_post_submission_rejection_counts_in_acceptance_rate(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    seed(db)
+    upsert_gigs(db, [
+        Gig(
+            id="board:task-2",
+            title="Fix another Python bug",
+            url="https://github.com/acme/project/issues/2",
+            currency="USD",
+            reward_amount=30,
+            raw={},
+        )
+    ])
+
+    record_outcome(db, "board:task-1", "claimed")
+    record_outcome(db, "board:task-1", "in_progress")
+    record_outcome(db, "board:task-1", "submitted")
+    record_outcome(db, "board:task-1", "rejected")
+
+    record_outcome(db, "board:task-2", "claimed")
+    record_outcome(db, "board:task-2", "in_progress")
+    record_outcome(db, "board:task-2", "submitted")
+    record_outcome(db, "board:task-2", "accepted")
+
+    summary = outcome_summary(db)
+    assert summary["submitted_or_later"] == 2
+    assert summary["accepted_or_paid"] == 1
+    assert summary["acceptance_rate"] == 0.5
+    db.close()
