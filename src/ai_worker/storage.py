@@ -261,5 +261,6 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
         "payout_latency_sample_size": len(payout_latencies),
         "average_payout_latency_days": round(sum(payout_latencies) / len(payout_latencies), 2) if payout_latencies else None,
         "median_payout_latency_days": round(median(payout_latencies), 2) if payout_latencies else None,
+        "by_source": source_performance(db),
         "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded.",
     }
