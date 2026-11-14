@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
@@ -12,6 +13,7 @@ from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
 from ai_worker.sources.registry import filter_sources, source_report
+from ai_worker.sources.trybounty import BountyAPIError, fetch_open_bounties
 from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
@@ -80,6 +82,12 @@ def main() -> int:
     ledger_report = ledger_sub.add_parser("report")
     ledger_report.add_argument("--db", default="data/ai_worker.sqlite3")
 
+    bounty = sub.add_parser("bounty", help="Read-only access to the official Bounty Agent marketplace")
+    bounty_sub = bounty.add_subparsers(dest="bounty_command", required=True)
+    bounty_scan = bounty_sub.add_parser("scan", help="List open Bounties; never bids or claims")
+    bounty_scan.add_argument("--limit", type=int, default=100)
+    bounty_scan.add_argument("--output", default="reports/bounty-open.json")
+
     sources = sub.add_parser("sources", help="List observed Jobbi boards and manual-only marketplaces")
     sources.add_argument("--limit", type=int, default=1000)
 
@@ -100,6 +108,19 @@ def main() -> int:
     sandbox_run.add_argument("task_command", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
+    if args.command == "bounty" and args.bounty_command == "scan":
+        try:
+            items = fetch_open_bounties(os.environ.get("BOUNTY_AGENT_API_KEY", ""), limit=args.limit)
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps([item.to_dict() for item in items], ensure_ascii=False, indent=2), encoding="utf-8")
+        except (BountyAPIError, OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(f"Open Bounties fetched: {len(items)} | Report: {output}")
+        print("Read-only scan completed. No bids, claims, messages, or submissions were made.")
+        return 0
+
     if args.command == "profile":
         try:
             result = profile_repository(args.workspace)
