@@ -27,6 +27,10 @@ class PipelineResult:
     workspace: str
     output_dir: str
     model: str
+    reward_amount: float | None
+    currency: str
+    estimated_effort_hours: float
+    estimated_gross_per_hour: float | None
     changed_files: list[str]
     compile_exit_code: int | None
     tests_exit_code: int | None
@@ -79,6 +83,8 @@ def run_pipeline(
     output_root: str | Path = ".ai-worker/proposals",
     image: str = DEFAULT_IMAGE,
     model: str | None = None,
+    reward_amount: float | None = None,
+    currency: str = "",
     timeout: int = 600,
 ) -> PipelineResult:
     """Inspect, clone, plan, draft, apply and test; stop before external submission."""
@@ -109,6 +115,12 @@ def run_pipeline(
 
         task_plan = plan_github_issue(brief, model=model, timeout=min(timeout, 900))
         _write_json(output_dir / "plan.json", task_plan.to_dict())
+        estimated_effort = float(task_plan.estimated_effort_hours)
+        estimated_gross_per_hour = (
+            round(reward_amount / estimated_effort, 2)
+            if reward_amount is not None and estimated_effort > 0
+            else None
+        )
 
         proposal = draft_patch(
             brief,
@@ -196,6 +208,10 @@ def run_pipeline(
             workspace=str(workspace),
             output_dir=str(output_dir),
             model=proposal.model,
+            reward_amount=reward_amount,
+            currency=currency,
+            estimated_effort_hours=estimated_effort,
+            estimated_gross_per_hour=estimated_gross_per_hour,
             changed_files=proposal.changed_files,
             compile_exit_code=compile_code,
             tests_exit_code=tests_code,
@@ -214,6 +230,9 @@ def run_pipeline(
             f"- Repository: {brief.repository}",
             f"- Workspace: {workspace}",
             f"- Model: {proposal.model}",
+            f"- Listed reward: {reward_amount:g} {currency}" if reward_amount is not None else "- Listed reward: Not provided",
+            f"- Estimated effort: {estimated_effort:g} hours",
+            f"- Estimated gross/hour: ${estimated_gross_per_hour:g}" if estimated_gross_per_hour is not None else "- Estimated gross/hour: Not calculable",
             f"- Changed files: {', '.join(proposal.changed_files) or 'None'}",
             f"- Python compile exit: {compile_code if compile_code is not None else 'Not run'}",
             f"- Pytest detected: {'yes' if tests_detected else 'no'}",
