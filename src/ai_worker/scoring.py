@@ -87,6 +87,16 @@ def evaluate(gig: Gig, min_reward: float = 5.0) -> tuple[bool, float, list[str]]
     if not gig.acceptance.strip():
         return False, 0, ["Acceptance criteria are missing"]
 
+    title_words = re.findall(r"[A-Za-z]{2,}", gig.title)
+    summary = " ".join(gig.summary.split())
+    if (
+        len(title_words) < 2
+        or len(summary) < 25
+        or summary.lower() == gig.title.strip().lower()
+        or re.fullmatch(r"/bounty(?:\s+\$?\d+(?:\.\d{1,2})?)?", summary, re.IGNORECASE)
+    ):
+        return False, 0, ["Task title or description is too thin to assess; likely test/spam listing"]
+
     risks = sorted(term for term in RISK_TERMS if _contains_term(text, term))
     if risks:
         return False, 0, [f"Risk terms detected: {', '.join(risks)}"]
@@ -95,9 +105,12 @@ def evaluate(gig: Gig, min_reward: float = 5.0) -> tuple[bool, float, list[str]]
         return False, 0, ["No clear software-task fit"]
 
     score = 20 + GRADE_POINTS[gig.payout_grade] + min(gig.reward_amount, 100) / 5 + min(len(fits), 5) * 4
-    return True, round(score, 1), [
+    reasons = [
         f"Software fit: {', '.join(fits[:5])}",
         f"Reward: {gig.reward_amount:g} {gig.currency}",
         f"Payment state: {gig.payment_state}",
         f"Payout evidence: {gig.payout_grade}",
     ]
+    if gig.reward_amount > 500:
+        reasons.append("High-value reward (>500 USD) requires manual scope and escrow verification")
+    return True, round(score, 1), reasons
