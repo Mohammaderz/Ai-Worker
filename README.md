@@ -16,6 +16,15 @@ Safety-first agent-work pipeline. v0.2 discovers paid software tasks, applies st
 Jobbi is an index, not the payer. Verify original-board terms, claim process, acceptance criteria, and payout conditions. A listed or escrowed reward is not the same as money received.
 
 ## Install and test (macOS, Python 3.11+)
+When the Mac is available, run the guided setup from the repository root:
+
+~~~bash
+bash scripts/bootstrap-mac.sh
+~~~
+
+The script checks Python, Docker Desktop and Ollama, creates the virtual environment, installs the project, builds the sandbox, runs tests and asks before downloading the multi-GB local model. It does not install Homebrew or start paid services.
+
+Manual setup:
 ~~~bash
 python3 -m venv .venv
 source .venv/bin/activate
