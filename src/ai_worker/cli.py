@@ -154,6 +154,8 @@ def main() -> int:
     if args.command == "pipeline":
         try:
             issue_url = args.url
+            reward_amount = None
+            currency = ""
             if args.gig_id:
                 gigs = fetch_gigs(1000)
                 db = connect(args.db)
@@ -163,12 +165,16 @@ def main() -> int:
                     db.close()
                 gig = resolve_eligible_gig(args.gig_id, gigs, min_reward=args.min_reward)
                 issue_url = gig.url
+                reward_amount = gig.reward_amount
+                currency = gig.currency
             result = run_pipeline(
                 issue_url,
                 scratch_root=args.scratch_root,
                 output_root=args.output_root,
                 image=args.image,
                 model=args.model,
+                reward_amount=reward_amount,
+                currency=currency,
                 timeout=args.timeout,
             )
         except (FeedError, PipelineError) as exc:
