@@ -36,8 +36,11 @@ def _text(value: str | bytes | None) -> str:
 
 
 def _validate_workspace(workspace: str | Path, scratch_root: str | Path) -> Path:
-    root = Path(scratch_root).resolve(strict=True)
-    target = Path(workspace).resolve(strict=True)
+    try:
+        root = Path(scratch_root).resolve(strict=True)
+        target = Path(workspace).resolve(strict=True)
+    except OSError as exc:
+        raise SandboxError(f"Workspace path could not be resolved: {exc}") from exc
     if not root.is_dir() or not target.is_dir():
         raise SandboxError("Scratch root and workspace must both be directories")
     if target == root:
@@ -80,7 +83,7 @@ def run_in_sandbox(
         "--security-opt=no-new-privileges:true", "--pids-limit=128",
         "--memory=1g", "--cpus=1", "--user=65532:65532",
         "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m",
-        "--tmpfs", "/home/worker:rw,noexec,nosuid,nodev,size=64m",
+        "--env", "HOME=/tmp",
         "--mount", mount, "--workdir", "/workspace",
         image, *command,
     ]
