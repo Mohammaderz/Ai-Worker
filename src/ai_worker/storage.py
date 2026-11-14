@@ -81,7 +81,7 @@ def record_outcome(
 ) -> None:
     import math
 
-    if status not in OUTCOME_TRANSITIONS:
+    if not isinstance(status, str) or status not in OUTCOME_TRANSITIONS:
         raise ValueError("Unknown outcome status")
     for label, value, allow_zero in (
         ("actual_hours", actual_hours, False),
@@ -109,6 +109,8 @@ def record_outcome(
     existing = db.execute(
         "SELECT status FROM task_outcomes WHERE gig_id=?", (gig_id,)
     ).fetchone()
+    if not existing and status != "claimed":
+        raise ValueError("The first outcome status must be claimed")
     if existing and status != existing[0] and status not in OUTCOME_TRANSITIONS[existing[0]]:
         raise ValueError(f"Invalid outcome transition: {existing[0]} -> {status}")
 
@@ -166,7 +168,9 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
                 payout_latencies.append(max(0.0, (paid_at - submitted_at).total_seconds() / 86400))
             except ValueError:
                 continue
-    submitted = counts["submitted"] + counts["accepted"] + counts["paid"] + counts["rejected"]
+    # A task rejected before submission has no submitted_at timestamp and must
+    # not dilute the acceptance rate. Rejections after submission retain it.
+    submitted = sum(1 for row in rows if row[4] is not None)
     accepted = counts["accepted"] + counts["paid"]
     return {
         "tasks": len(rows),
