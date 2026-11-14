@@ -72,7 +72,7 @@ ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status paid --gross-received
 ai-worker ledger report
 ~~~
 
-Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate, realized net/hour from paid-task hours, and average/median payout latency.
+Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate, realized net/hour from paid-task hours, and average/median payout latency. It also breaks results down by source. Once a source has at least 3 submitted tasks and 2 actual payments, its observed acceptance rate, net paid/hour and payout delay can make a small ranking-only adjustment (capped at ±8 points) to future scans. This never bypasses eligibility or safety filters; small samples do not influence ranking.
 
 ## Example issue workflow
 ~~~bash
