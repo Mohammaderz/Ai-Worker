@@ -29,12 +29,15 @@ class PatchApplyResult:
 
 
 def _safe_patch_path(value: str) -> str:
+    parts = value.split("/")
     path = PurePosixPath(value)
     if (
         not value
         or value.startswith("/")
         or "\\" in value
-        or any(part in {"", ".", ".."} for part in path.parts)
+        or not parts
+        or any(part in {"", ".", ".."} for part in parts)
+        or not path.parts
         or path.parts[0] == ".git"
     ):
         raise PatchError(f"Unsafe path in patch: {value!r}")
@@ -53,6 +56,7 @@ def validate_patch_text(diff: str) -> list[str]:
         raise PatchError("Binary or NUL-containing patches are not supported")
 
     paths: list[str] = []
+    current_path: str | None = None
     for line in diff.splitlines():
         if line.startswith("diff --git "):
             parts = line[len("diff --git "):].split(" ")
@@ -62,10 +66,22 @@ def validate_patch_text(diff: str) -> list[str]:
             new_path = _safe_patch_path(parts[1][2:])
             if old_path != new_path:
                 raise PatchError("Renames and copies are not supported in the first patch runner")
+            current_path = new_path
             paths.append(new_path)
-        elif line.startswith("new file mode 120000") or line.startswith("old mode 120000") or line.startswith("new mode 120000"):
+        elif line.startswith("--- ") or line.startswith("+++ "):
+            if current_path is None:
+                raise PatchError("Patch file headers appeared before a Git diff header")
+            value = line[4:].split("\t", 1)[0]
+            if value == "/dev/null":
+                continue
+            expected_prefix = "a/" if line.startswith("--- ") else "b/"
+            if not value.startswith(expected_prefix):
+                raise PatchError("Patch contains an absolute or unsupported file header")
+            if _safe_patch_path(value[2:]) != current_path:
+                raise PatchError("Patch file header does not match its Git diff header")
+        elif "120000" in line and ("mode" in line or line.startswith("index ")):
             raise PatchError("Symlink changes are not allowed")
-        elif line.startswith("new file mode 160000") or line.startswith("old mode 160000") or line.startswith("new mode 160000"):
+        elif "160000" in line and "mode" in line:
             raise PatchError("Submodule changes are not allowed")
 
     if not paths:
