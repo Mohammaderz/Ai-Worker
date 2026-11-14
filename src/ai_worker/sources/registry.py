@@ -39,7 +39,8 @@ INDEXED_SOURCES: dict[str, SourceInfo] = {
 }
 
 MANUAL_ONLY_SOURCES: dict[str, SourceInfo] = {
-    "gitcoin": SourceInfo("gitcoin", "Gitcoin", "manual_link", "manual_only", "No verified public contributor job-search API adapter is configured; add only after confirming current official access.", "https://gitcoin.co/"),
+    "gitcoin": SourceInfo("gitcoin", "Gitcoin", "manual_link", "manual_only", "Gitcoin sunset its legacy cGrants bounty program in 2023; current Grants are not treated as paid software gigs. Buidlbox is the successor route for hackathons and bounties; manual review only.", "https://gitcoin.co/"),
+    "buidlbox": SourceInfo("buidlbox", "Buidlbox", "manual_link", "manual_only", "Successor route for Gitcoin hackathons and bounties; no verified contributor search API adapter configured.", "https://www.buidlbox.io/"),
     "upwork": SourceInfo("upwork", "Upwork", "approved_api_only", "manual_only", "Requires approved API access; unauthorized scraping or background automation risks account suspension.", "https://www.upwork.com/developer"),
     "contra": SourceInfo("contra", "Contra", "manual_link", "manual_only", "No automated scraping or outreach; review opportunities manually under platform terms.", "https://contra.com/"),
     "hackerone": SourceInfo("hackerone", "HackerOne", "program_scope_review", "manual_only", "Public API documentation is primarily for program-owner workflows; researcher participation requires in-scope manual validation.", "https://www.hackerone.com/"),
