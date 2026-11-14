@@ -23,8 +23,12 @@ class Gig:
 
     @classmethod
     def from_feed_item(cls, item: dict[str, Any]) -> "Gig":
-        meta = item.get("_jobbi") or {}
-        reward = meta.get("reward") or {}
+        meta = item.get("_jobbi")
+        if not isinstance(meta, dict):
+            meta = {}
+        reward = meta.get("reward")
+        if not isinstance(reward, dict):
+            reward = {}
         try:
             amount = float(reward["amount"]) if reward.get("amount") is not None else None
         except (TypeError, ValueError, OverflowError):
