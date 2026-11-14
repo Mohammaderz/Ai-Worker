@@ -79,7 +79,7 @@ def test_draft_patch_returns_validated_diff_without_writing_files(monkeypatch, t
     assert proposal.changed_files == ["client.py"]
     assert proposal.diff == DIFF
     user_content = next(item["content"] for item in seen["request"]["messages"] if item["role"] == "user")
-    assert "main.py" in user_content
+    assert "client.py" in user_content
     assert ".env" not in user_content
     assert not (tmp_path / ".ai-worker-generated.patch").exists()
 
