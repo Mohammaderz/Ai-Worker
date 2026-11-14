@@ -40,7 +40,7 @@ def test_only_actual_paid_amounts_count_as_earnings(tmp_path):
     assert summary["gross_received"] == 25
     assert summary["fees"] == 1.5
     assert summary["net_received"] == 23.5
-    assert summary["net_received_per_tracked_hour"] == 11.75
+    assert summary["net_received_per_paid_hour"] == 11.75
     assert summary["acceptance_rate"] == 1.0
 
 
