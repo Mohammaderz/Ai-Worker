@@ -56,6 +56,7 @@ def main() -> int:
     pipeline.add_argument("--scratch-root", default=".ai-worker/sandboxes")
     pipeline.add_argument("--output-root", default=".ai-worker/proposals")
     pipeline.add_argument("--image", default=DEFAULT_IMAGE)
+    pipeline.add_argument("--node-image", default="ai-worker-sandbox:node22")
     pipeline.add_argument("--model")
     pipeline.add_argument("--timeout", type=int, default=600)
 
@@ -187,6 +188,7 @@ def main() -> int:
                 scratch_root=args.scratch_root,
                 output_root=args.output_root,
                 image=args.image,
+                node_image=args.node_image,
                 model=args.model,
                 reward_amount=reward_amount,
                 currency=currency,

@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 DEFAULT_IMAGE = "ai-worker-sandbox:py311"
+DEFAULT_NODE_IMAGE = "ai-worker-sandbox:node22"
 MAX_OUTPUT_CHARS = 20_000
 
 

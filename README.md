@@ -22,7 +22,7 @@ When the Mac is available, run the guided setup from the repository root:
 bash scripts/bootstrap-mac.sh
 ~~~
 
-The script checks Python, Docker Desktop and Ollama, creates the virtual environment, installs the project, builds the sandbox, runs tests and asks before downloading the multi-GB local model. It does not install Homebrew or start paid services.
+The script checks Python, Docker Desktop and Ollama, creates the virtual environment, installs the project, builds both Python and Node sandboxes, runs tests and asks before downloading the multi-GB local model. It does not install Homebrew or start paid services.
 
 Manual setup:
 ~~~bash
@@ -58,7 +58,7 @@ ai-worker pipeline --gig-id SOURCE:NATIVE_ID
 ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
 ~~~
 
-The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
+The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. Python patches receive compileall and detected pytest checks. JavaScript/TypeScript patches receive isolated esbuild syntax transpilation; dependency-aware Node test suites are not run yet because project dependencies are not fetched from untrusted manifests. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
 
 ## Track real outcomes and payouts
 The local outcome ledger records progress only after you manually claim or submit work. Only a manually recorded `paid` status with the actual received amount counts as income; listed rewards, accepted work and pending payments are not counted as earnings.

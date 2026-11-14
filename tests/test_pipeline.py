@@ -193,3 +193,53 @@ def test_pipeline_holds_high_value_bounties_for_manual_verification(monkeypatch,
     )
     assert result.status == "blocked_for_human_review"
     assert "above $500" in result.message
+
+
+
+def test_pipeline_runs_node_syntax_check_in_node_sandbox(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"],
+            estimated_effort_hours=1.0, to_dict=lambda: {"risk_level": "low"}
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="local", diff="diff --git a/src/index.ts b/src/index.ts",
+            changed_files=["src/index.ts"], questions=[], to_dict=lambda: {"diff": "draft"}
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda *args, **kwargs: SimpleNamespace(applied=True, message="applied"),
+    )
+    captured = {}
+
+    def fake_run(workspace, command, **kwargs):
+        captured["command"] = command
+        captured["image"] = kwargs["image"]
+        return SimpleNamespace(exit_code=0, stdout="esbuild ok", stderr="")
+
+    monkeypatch.setattr(pipeline, "run_in_sandbox", fake_run)
+    result = pipeline.run_pipeline(
+        brief().url,
+        scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals",
+        node_image="ai-worker-sandbox:node22-test",
+    )
+
+    assert result.status == "static_check_passed_no_tests"
+    assert result.node_static_exit_code == 0
+    assert captured["image"] == "ai-worker-sandbox:node22-test"
+    assert captured["command"] == [
+        "esbuild", "src/index.ts", "--outdir=/tmp/ai-worker-check"
+    ]

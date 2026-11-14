@@ -18,6 +18,32 @@ jobs:
         run: bash -n scripts/bootstrap-mac.sh
       - name: Build isolated task image
         run: docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+      - name: Build Node sandbox image
+        run: docker build -f sandbox/Dockerfile.node -t ai-worker-sandbox:node22 .
+      - name: Smoke-test Node and TypeScript transpilation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from ai_worker.sandbox import run_in_sandbox
+
+          root = Path(".ci-sandboxes").resolve()
+          workspace = root / "node-smoke"
+          (workspace / "src").mkdir(parents=True, exist_ok=True)
+          (workspace / "src" / "index.ts").write_text(
+              "export const add = (a: number, b: number): number => a + b;\n",
+              encoding="utf-8",
+          )
+          result = run_in_sandbox(
+              workspace,
+              ["esbuild", "src/index.ts", "--outdir=/tmp/ai-worker-check"],
+              scratch_root=root,
+              image="ai-worker-sandbox:node22",
+              timeout_seconds=30,
+          )
+          print(result.stdout)
+          if result.exit_code != 0:
+              raise SystemExit(result.stderr or "Node syntax smoke test failed")
+          PY
       - name: Smoke-test isolated execution
         run: |
           python - <<'PY'

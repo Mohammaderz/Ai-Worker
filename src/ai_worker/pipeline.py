@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
-from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
+from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
@@ -37,6 +37,8 @@ class PipelineResult:
     tests_detected: bool
     compile_log: str
     tests_log: str
+    node_static_exit_code: int | None
+    node_static_log: str
     message: str
 
     def to_dict(self) -> dict:
@@ -82,6 +84,7 @@ def run_pipeline(
     scratch_root: str | Path,
     output_root: str | Path = ".ai-worker/proposals",
     image: str = DEFAULT_IMAGE,
+    node_image: str = DEFAULT_NODE_IMAGE,
     model: str | None = None,
     reward_amount: float | None = None,
     currency: str = "",
@@ -132,6 +135,8 @@ def run_pipeline(
         if proposal.diff:
             (output_dir / "proposal.patch").write_text(proposal.diff, encoding="utf-8")
 
+        node_static_code = None
+        node_static_log = ""
         if not proposal.diff:
             status = "needs_human_clarification"
             message = "The model did not produce a safe diff. Review the plan and questions; no patch was applied."
@@ -179,7 +184,25 @@ def run_pipeline(
                     compile_code = compile_result.exit_code
                     compile_log = (compile_result.stdout + "\n" + compile_result.stderr).strip()
                     (output_dir / "compile.log").write_text(compile_log, encoding="utf-8")
-                if compile_code is not None and compile_code != 0:
+                node_changed_files = [
+                    path for path in proposal.changed_files
+                    if Path(path).suffix.lower() in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
+                ]
+                if node_changed_files:
+                    node_result = run_in_sandbox(
+                        workspace,
+                        ["esbuild", *node_changed_files, "--outdir=/tmp/ai-worker-check"],
+                        scratch_root=scratch,
+                        image=node_image,
+                        timeout_seconds=min(timeout, 300),
+                    )
+                    node_static_code = node_result.exit_code
+                    node_static_log = (node_result.stdout + "\n" + node_result.stderr).strip()
+                    (output_dir / "node-static.log").write_text(node_static_log, encoding="utf-8")
+                if (
+                    (compile_code is not None and compile_code != 0)
+                    or (node_static_code is not None and node_static_code != 0)
+                ):
                     status = "compile_failed"
                     message = "The isolated Python syntax check failed. Review sandbox logs before proceeding."
                 elif tests_detected:
@@ -199,12 +222,17 @@ def run_pipeline(
                     else:
                         status = "tests_failed"
                         message = "The patch was applied, but the isolated pytest run failed. Review logs and missing dependencies."
-                elif compile_code is None:
+                elif compile_code is None and node_static_code is None:
                     status = "no_automated_tests_detected"
-                    message = "No Python source or Python tests were detected; no language-specific test runner is configured. Human review is required."
+                    message = "No supported source files or Python tests were detected; no language-specific test runner is configured. Human review is required."
                 else:
                     status = "static_check_passed_no_tests"
-                    message = "Patch applied and Python syntax check passed, but no Python tests were detected. Human review is required."
+                    checks = []
+                    if compile_code == 0:
+                        checks.append("Python syntax check passed")
+                    if node_static_code == 0:
+                        checks.append("JavaScript/TypeScript syntax transpilation passed with esbuild")
+                    message = "; ".join(checks) + ". No dependency-aware JavaScript/TypeScript test suite was run. Human review is required."
 
         result = PipelineResult(
             status=status,
@@ -224,6 +252,8 @@ def run_pipeline(
             tests_detected=tests_detected,
             compile_log=compile_log,
             tests_log=tests_log,
+            node_static_exit_code=node_static_code,
+            node_static_log=node_static_log,
             message=message,
         )
         _write_json(output_dir / "pipeline-result.json", result.to_dict())
@@ -245,6 +275,8 @@ def run_pipeline(
             f"- Pytest exit: {tests_code if tests_code is not None else 'Not run'}",
             f"- Compile log: {'compile.log' if compile_code is not None else 'Not generated'}",
             f"- Pytest log: {'pytest.log' if tests_code is not None else 'Not generated'}",
+            f"- JavaScript/TypeScript syntax exit: {node_static_code if node_static_code is not None else 'Not run'}",
+            f"- JavaScript/TypeScript log: {'node-static.log' if node_static_code is not None else 'Not generated'}",
             "",
             message,
             "",

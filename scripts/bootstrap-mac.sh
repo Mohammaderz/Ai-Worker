@@ -34,8 +34,11 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 
-printf '\nBuilding the isolated task image...\n'
+printf '\nBuilding the isolated Python task image...\n'
 docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+
+printf '\nBuilding the isolated Node task image...\n'
+docker build -f sandbox/Dockerfile.node -t ai-worker-sandbox:node22 .
 
 mkdir -p .ai-worker/sandboxes .ai-worker/proposals data reports
 
