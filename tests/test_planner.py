@@ -49,13 +49,14 @@ class FakeResponse:
 def test_local_planner_returns_validated_structured_plan(monkeypatch):
     seen = {}
 
-    def fake_urlopen(request, timeout):
-        seen["url"] = request.full_url
-        seen["body"] = json.loads(request.data.decode("utf-8"))
-        seen["timeout"] = timeout
-        return FakeResponse({"message": {"content": json.dumps(valid_plan())}})
+    class FakeOpener:
+        def open(self, request, timeout):
+            seen["url"] = request.full_url
+            seen["body"] = json.loads(request.data.decode("utf-8"))
+            seen["timeout"] = timeout
+            return FakeResponse({"message": {"content": json.dumps(valid_plan())}})
 
-    monkeypatch.setattr("ai_worker.planner.urlopen", fake_urlopen)
+    monkeypatch.setattr("ai_worker.planner.build_opener", lambda handler: FakeOpener())
     result = plan_github_issue(brief(), model="qwen2.5-coder:7b")
 
     assert result.estimated_effort_hours == 3.5
@@ -74,10 +75,11 @@ def test_planner_rejects_remote_model_endpoint():
 def test_planner_rejects_invalid_model_output(monkeypatch):
     bad = valid_plan()
     bad["estimated_effort_hours"] = float("inf")
-    monkeypatch.setattr(
-        "ai_worker.planner.urlopen",
-        lambda request, timeout: FakeResponse({"message": {"content": json.dumps(bad)}}),
-    )
+    class FakeOpener:
+        def open(self, request, timeout):
+            return FakeResponse({"message": {"content": json.dumps(bad)}})
+
+    monkeypatch.setattr("ai_worker.planner.build_opener", lambda handler: FakeOpener())
     with pytest.raises(OllamaError):
         plan_github_issue(brief())
 
