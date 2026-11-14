@@ -4,6 +4,7 @@ Safety-first agent-work pipeline. v0.2 discovers paid software tasks, applies st
 
 ## Current scope
 - Reads Jobbi's public read-only JSON feed.
+- Inspects canonical public GitHub issue links read-only to collect title, state, labels and acceptance context; issue text is treated as untrusted data.
 - Focuses on agent-lane software tasks with USD/USDC rewards.
 - Requires an explicitly escrowed reward and B-grade-or-better public payout evidence.
 - Rejects closed/expired tasks, unsafe links, malformed expiry data, missing acceptance criteria, and risky categories.
@@ -20,6 +21,9 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 pytest -q
 ai-worker scan
+
+# Inspect a public GitHub issue linked from a bounty listing
+ai-worker inspect --url https://github.com/OWNER/REPO/issues/123
 \`\`\`
 
 ## Build the sandbox image
