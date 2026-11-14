@@ -33,10 +33,17 @@ def clone_public_github_repo(
     if not match:
         raise WorkspaceError("Only canonical owner/repository names are supported")
     owner, name = match.groups()
+    if owner in {".", ".."} or name in {".", ".."}:
+        raise WorkspaceError("Invalid GitHub owner or repository name")
+    if not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 900:
+        raise WorkspaceError("Clone timeout must be between 1 and 900 seconds")
 
     root = Path(scratch_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
-    target = Path(workspace).absolute()
+    raw_target = Path(workspace)
+    if raw_target.is_symlink():
+        raise WorkspaceError("Workspace path may not be a symlink")
+    target = raw_target.resolve(strict=False)
     target_parent = target.parent.resolve()
     if target_parent != root and root not in target_parent.parents:
         raise WorkspaceError("Workspace must be a child of the dedicated scratch root")
