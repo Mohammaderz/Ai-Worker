@@ -21,7 +21,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: data/ai_worker.sqlite3
-          key: ai-worker-ledger-\${{ github.run_id }}
+          key: ai-worker-ledger-${{ github.run_id }}
           restore-keys: |
             ai-worker-ledger-
       - name: Install AI-Worker
@@ -31,7 +31,7 @@ jobs:
       - name: Publish scan report artifact
         uses: actions/upload-artifact@v4
         with:
-          name: opportunity-scan-\${{ github.run_id }}
+          name: opportunity-scan-${{ github.run_id }}
           path: |
             reports/latest.md
             data/ai_worker.sqlite3
