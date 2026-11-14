@@ -22,7 +22,7 @@ RISK_TERMS = {
 
 
 def _contains_term(text: str, term: str) -> bool:
-    pattern = r"(?<!\\w)" + re.escape(term).replace(r"\\ ", r"\\s+") + r"(?!\\w)"
+    pattern = r"(?<!\w)" + re.escape(term).replace(r"\ ", r"\s+") + r"(?!\w)"
     return re.search(pattern, text) is not None
 
 
@@ -32,7 +32,7 @@ def _safe_listing_url(value: str) -> bool:
         host = parsed.hostname
         if parsed.scheme != "https" or not host or parsed.username or parsed.password:
             return False
-        if host.lower() in {"localhost"} or host.lower().endswith((".localhost", ".local", ".internal")):
+        if host.lower() == "localhost" or host.lower().endswith((".localhost", ".local", ".internal")):
             return False
         if parsed.port not in (None, 443):
             return False
