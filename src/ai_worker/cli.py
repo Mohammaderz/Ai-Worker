@@ -1,6 +1,7 @@
 import argparse
 import json
 
+from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.report import write_report
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
@@ -15,6 +16,11 @@ def main() -> int:
 
     inspect = sub.add_parser("inspect")
     inspect.add_argument("--url", required=True)
+
+    plan = sub.add_parser("plan")
+    plan.add_argument("--url", required=True)
+    plan.add_argument("--model")
+    plan.add_argument("--timeout", type=int, default=300)
 
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
@@ -39,6 +45,16 @@ def main() -> int:
             print(f"ERROR: {exc}")
             return 2
         print(json.dumps(brief.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "plan":
+        try:
+            brief = inspect_github_issue(args.url)
+            task_plan = plan_github_issue(brief, model=args.model, timeout=args.timeout)
+        except (GitHubIssueError, OllamaError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps(task_plan.to_dict(), ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "scan":
