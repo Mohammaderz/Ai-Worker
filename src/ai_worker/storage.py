@@ -142,6 +142,79 @@ def record_outcome(
     db.commit()
 
 
+def source_performance(db: sqlite3.Connection) -> list[dict]:
+    """Summarize realized outcomes by source; never treat listed rewards as income."""
+    from datetime import datetime
+    from collections import defaultdict
+
+    rows = db.execute(
+        """SELECT COALESCE(NULLIF(g.source, ''), 'unknown') AS source,
+                  o.status, o.actual_hours, o.gross_received, o.fees,
+                  o.submitted_at, o.accepted_at, o.paid_at
+           FROM task_outcomes AS o
+           JOIN gigs AS g ON g.id = o.gig_id
+           ORDER BY source"""
+    ).fetchall()
+    grouped: dict[str, list[tuple]] = defaultdict(list)
+    for row in rows:
+        grouped[row[0]].append(row[1:])
+
+    results = []
+    for source, items in grouped.items():
+        submitted = [r for r in items if r[4] is not None]
+        accepted = [r for r in items if r[5] is not None]
+        paid = [r for r in items if r[1] == "paid"]
+        gross = sum(float(r[2] or 0) for r in paid)
+        fees = sum(float(r[3] or 0) for r in paid)
+        paid_hours = sum(float(r[1] or 0) for r in paid)
+        latencies = []
+        for row in paid:
+            if row[4] and row[6]:
+                try:
+                    start = datetime.fromisoformat(str(row[4]))
+                    end = datetime.fromisoformat(str(row[6]))
+                    latencies.append(max(0.0, (end - start).total_seconds() / 86400))
+                except ValueError:
+                    pass
+        acceptance_rate = len(accepted) / len(submitted) if submitted else None
+        net = gross - fees
+        # Do not infer a source preference from tiny samples.
+        if len(submitted) < 3 or len(paid) < 2:
+            confidence = "insufficient_data"
+            guidance = "Collect at least 3 submissions and 2 actual payments before adapting source priority."
+        elif acceptance_rate is not None and acceptance_rate >= 0.6 and net > 0:
+            confidence = "usable"
+            guidance = "Positive observed results; keep monitoring before increasing exposure."
+        else:
+            confidence = "usable"
+            guidance = "Observed results are weak or mixed; inspect rejection reasons and payout friction."
+        results.append({
+            "source": source,
+            "tracked_tasks": len(items),
+            "submitted_tasks": len(submitted),
+            "accepted_tasks": len(accepted),
+            "paid_tasks": len(paid),
+            "acceptance_rate": round(acceptance_rate, 3) if acceptance_rate is not None else None,
+            "gross_received": round(gross, 2),
+            "fees": round(fees, 2),
+            "net_received": round(net, 2),
+            "paid_task_hours": round(paid_hours, 2),
+            "net_per_paid_hour": round(net / paid_hours, 2) if paid_hours else None,
+            "average_payout_days": round(sum(latencies) / len(latencies), 2) if latencies else None,
+            "confidence": confidence,
+            "guidance": guidance,
+        })
+    return sorted(
+        results,
+        key=lambda item: (
+            item["confidence"] == "usable",
+            item["net_per_paid_hour"] if item["net_per_paid_hour"] is not None else -1,
+            item["net_received"],
+        ),
+        reverse=True,
+    )
+
+
 def outcome_summary(db: sqlite3.Connection) -> dict:
     from datetime import datetime
     from statistics import median
