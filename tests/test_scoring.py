@@ -109,3 +109,15 @@ def test_rejects_sensitive_identity_and_credential_tasks():
 def test_rejects_wallet_bonds_and_high_risk_exploit_tasks():
     assert not evaluate(sample(summary="Connect wallet and post refundable bond"))[0]
     assert not evaluate(sample(title="Remote code execution exploit development"))[0]
+
+
+def test_rejects_low_information_bounty_spam():
+    assert not evaluate(sample(title="ceshi", summary="/bounty $5"))[0]
+    assert not evaluate(sample(title="My issue", summary="My issue"))[0]
+    assert not evaluate(sample(title="testgogog", summary="/bounty"))[0]
+
+
+def test_high_value_bounty_is_flagged_for_manual_verification():
+    ok, _score, reasons = evaluate(sample(reward_amount=10000))
+    assert ok
+    assert any("manual scope and escrow verification" in reason for reason in reasons)
