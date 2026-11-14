@@ -5,6 +5,7 @@ Safety-first agent-work pipeline. v0.2 discovers paid software tasks, applies st
 ## Current scope
 - Reads Jobbi's public read-only JSON feed.
 - Inspects canonical public GitHub issue links read-only to collect title, state, labels and acceptance context; issue text is treated as untrusted data.
+- Drafts structured work plans through a loopback-only local Ollama model; no paid API or remote model endpoint is used by default.
 - Focuses on agent-lane software tasks with USD/USDC rewards.
 - Requires an explicitly escrowed reward and B-grade-or-better public payout evidence.
 - Rejects closed/expired tasks, unsafe links, malformed expiry data, missing acceptance criteria, and risky categories.
@@ -24,6 +25,11 @@ ai-worker scan
 
 # Inspect a public GitHub issue linked from a bounty listing
 ai-worker inspect --url https://github.com/OWNER/REPO/issues/123
+
+# Draft a structured plan with a local Ollama model (no API key)
+ollama pull qwen2.5-coder:7b
+ollama serve
+ai-worker plan --url https://github.com/OWNER/REPO/issues/123
 \`\`\`
 
 ## Build the sandbox image
