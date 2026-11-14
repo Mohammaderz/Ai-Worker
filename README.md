@@ -45,4 +45,6 @@ docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
 ai-worker sandbox run --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes -- python -m compileall .
 \`\`\`
 
+After this PR is merged into the default branch, the read-only opportunity-scan workflow is scheduled every six hours and uploads a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.
+
 Daily $5-$10 is a target, not a guarantee. The patch drafter proposes a diff; it does not publish or submit it. Review the diff and run the project's tests before any external submission. See docs/ARCHITECTURE.md and sandbox/README.md.
