@@ -141,8 +141,11 @@ def record_outcome(
 
 
 def outcome_summary(db: sqlite3.Connection) -> dict:
+    from datetime import datetime
+    from statistics import median
+
     rows = db.execute(
-        """SELECT status,actual_hours,gross_received,fees
+        """SELECT status,actual_hours,gross_received,fees,submitted_at,paid_at
            FROM task_outcomes"""
     ).fetchall()
     counts = {status: 0 for status in OUTCOME_TRANSITIONS}
@@ -153,6 +156,15 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
     fees = sum(float(row[3] or 0) for row in paid)
     hours = sum(float(row[1] or 0) for row in rows)
     paid_hours = sum(float(row[1] or 0) for row in paid)
+    payout_latencies = []
+    for row in paid:
+        if row[4] and row[5]:
+            try:
+                submitted_at = datetime.fromisoformat(str(row[4]))
+                paid_at = datetime.fromisoformat(str(row[5]))
+                payout_latencies.append(max(0.0, (paid_at - submitted_at).total_seconds() / 86400))
+            except ValueError:
+                continue
     submitted = counts["submitted"] + counts["accepted"] + counts["paid"] + counts["rejected"]
     accepted = counts["accepted"] + counts["paid"]
     return {
@@ -168,5 +180,8 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
         "tracked_hours_all_tasks": round(hours, 2),
         "paid_task_hours": round(paid_hours, 2),
         "net_received_per_paid_hour": round((gross - fees) / paid_hours, 2) if paid_hours else None,
+        "payout_latency_sample_size": len(payout_latencies),
+        "average_payout_latency_days": round(sum(payout_latencies) / len(payout_latencies), 2) if payout_latencies else None,
+        "median_payout_latency_days": round(median(payout_latencies), 2) if payout_latencies else None,
         "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded.",
     }
