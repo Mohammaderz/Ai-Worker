@@ -78,3 +78,24 @@ def test_reject_unknown_claim_availability():
 
 def test_reject_invalid_minimum_reward():
     assert not evaluate(sample(), min_reward=float("nan"))[0]
+
+
+def test_feed_normalizer_handles_malformed_nested_metadata():
+    gig = Gig.from_feed_item({
+        "id": "malformed",
+        "url": "https://example.com/task",
+        "_jobbi": "not-an-object",
+    })
+    assert gig.id == "malformed"
+    assert gig.payment_state == ""
+    assert gig.reward_amount is None
+
+
+def test_feed_normalizer_handles_malformed_reward_object():
+    gig = Gig.from_feed_item({
+        "id": "malformed-reward",
+        "url": "https://example.com/task",
+        "_jobbi": {"reward": ["not", "an", "object"]},
+    })
+    assert gig.reward_amount is None
+    assert gig.currency == ""
