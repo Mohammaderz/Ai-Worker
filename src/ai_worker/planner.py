@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, asdict
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from ai_worker.sources.github_issue import ResearchBrief
 
@@ -19,6 +19,11 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 class OllamaError(RuntimeError):
     pass
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 PLAN_SCHEMA = {
@@ -92,7 +97,7 @@ def _validate_plan(data: object) -> dict:
     effort = data["estimated_effort_hours"]
     if isinstance(effort, bool) or not isinstance(effort, (int, float)) or not math.isfinite(effort) or not 0 <= effort <= 100:
         raise OllamaError("Task plan effort estimate is invalid")
-    if data["risk_level"] not in {"low", "medium", "high"}:
+    if not isinstance(data["risk_level"], str) or data["risk_level"] not in {"low", "medium", "high"}:
         raise OllamaError("Task plan risk level is invalid")
     for field in ("prerequisites", "implementation_steps", "test_plan", "acceptance_checklist", "blockers"):
         values = data[field]
@@ -159,7 +164,8 @@ def plan_github_issue(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=timeout) as response:
+        opener = build_opener(_NoRedirect())
+        with opener.open(request, timeout=timeout) as response:
             raw = response.read(MAX_RESPONSE_BYTES + 1)
         if len(raw) > MAX_RESPONSE_BYTES:
             raise OllamaError("Ollama response exceeded the 2 MiB safety limit")
