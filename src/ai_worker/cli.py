@@ -31,6 +31,7 @@ def main() -> int:
     patch_draft.add_argument("--workspace", required=True)
     patch_draft.add_argument("--model")
     patch_draft.add_argument("--timeout", type=int, default=600)
+    patch_draft.add_argument("--diff-output")
     patch_apply = patch_sub.add_parser("apply")
     patch_apply.add_argument("--diff-file", required=True)
     patch_apply.add_argument("--workspace", required=True)
@@ -82,6 +83,12 @@ def main() -> int:
         except (GitHubIssueError, PatchError) as exc:
             print(f"ERROR: {exc}")
             return 2
+        if args.diff_output and proposal.diff:
+            try:
+                Path(args.diff_output).write_text(proposal.diff, encoding="utf-8")
+            except OSError as exc:
+                print(f"ERROR: could not save patch: {exc}")
+                return 2
         print(json.dumps(proposal.to_dict(), ensure_ascii=False, indent=2))
         return 0 if proposal.diff else 3
 
