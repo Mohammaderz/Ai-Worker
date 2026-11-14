@@ -149,7 +149,8 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
            FROM task_outcomes"""
     ).fetchall()
     counts = {status: 0 for status in OUTCOME_TRANSITIONS}
-    for status, _hours, _gross, _fees in rows:
+    for row in rows:
+        status = row[0]
         counts[status] = counts.get(status, 0) + 1
     paid = [row for row in rows if row[0] == "paid"]
     gross = sum(float(row[2] or 0) for row in paid)
