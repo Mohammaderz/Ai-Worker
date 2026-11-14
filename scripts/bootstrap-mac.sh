@@ -42,7 +42,9 @@ mkdir -p .ai-worker/sandboxes .ai-worker/proposals data reports
 printf '\nRunning the project test suite...\n'
 pytest -q
 
-if ! ollama list 2>/dev/null | grep -q 'qwen2.5-coder:7b'; then
+if ! ollama list >/dev/null 2>&1; then
+  printf '\nOllama is installed, but its local server is not running. Start the Ollama app or run "ollama serve", then rerun this script to check/download the model.\n'
+elif ! ollama list 2>/dev/null | grep -q 'qwen2.5-coder:7b'; then
   printf '\nThe local coding model qwen2.5-coder:7b is not installed.\n'
   read -r -p "Download it now? This requires several GB of disk space. [y/N] " ANSWER
   case "$ANSWER" in
