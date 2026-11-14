@@ -6,6 +6,7 @@ from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.economics import source_priority_adjustments
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
+from ai_worker.portfolio import select_portfolio
 from ai_worker.report import write_report
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
@@ -81,6 +82,7 @@ def main() -> int:
     scan.add_argument("--min-reward", type=float, default=5.0)
     scan.add_argument("--db", default="data/ai_worker.sqlite3")
     scan.add_argument("--output", default="reports/latest.md")
+    scan.add_argument("--max-opportunities", type=int, default=5)
 
     sandbox = sub.add_parser("sandbox")
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
@@ -249,10 +251,11 @@ def main() -> int:
                 else:
                     rejected += 1
             ranked.sort(key=lambda row: row[1], reverse=True)
-            report = write_report(ranked, args.output, source_history=history)
+            portfolio = select_portfolio(ranked, limit=args.max_opportunities)
+            report = write_report(portfolio, args.output, source_history=history)
         finally:
             db.close()
-        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
+        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Selected: {len(portfolio)} | Filtered: {rejected}")
         print(f"Report: {report}")
         return 0
 
