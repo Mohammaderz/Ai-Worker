@@ -99,3 +99,8 @@ def test_feed_normalizer_handles_malformed_reward_object():
     })
     assert gig.reward_amount is None
     assert gig.currency == ""
+
+
+def test_rejects_sensitive_identity_and_credential_tasks():
+    assert not evaluate(sample(summary="Implement PII export and civil ID upload"))[0]
+    assert not evaluate(sample(title="Rotate AWS IAM key and secret key"))[0]
