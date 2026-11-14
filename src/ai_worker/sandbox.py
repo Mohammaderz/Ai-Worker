@@ -102,10 +102,14 @@ def run_in_sandbox(
         )
     except subprocess.TimeoutExpired as exc:
         # A killed Docker client can leave the container running; explicitly stop it.
-        try:
-            subprocess.run(["docker", "kill", container_name], capture_output=True, timeout=10, check=False)
-        finally:
-            subprocess.run(["docker", "rm", "-f", container_name], capture_output=True, timeout=10, check=False)
+        for cleanup_argv in (
+            ["docker", "kill", container_name],
+            ["docker", "rm", "-f", container_name],
+        ):
+            try:
+                subprocess.run(cleanup_argv, capture_output=True, timeout=10, check=False)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
         return SandboxResult(
             exit_code=124,
             stdout=_text(exc.stdout)[-MAX_OUTPUT_CHARS:],
