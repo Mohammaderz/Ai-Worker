@@ -54,7 +54,7 @@ ai-worker scan --limit 1000
 ai-worker scan --limit 1000 --source algora --source issuehunt
 ~~~
 
-The source registry distinguishes boards actually observed in Jobbi's feed from manual-only marketplaces. Upwork is API-approval-only; Contra, Gitcoin, Freelancer, Fiverr, Codementor, HackerOne and Immunefi are not falsely presented as automated integrations. These are tracked as manual/review-only until a permitted official data interface is verified. Jobbi is an index, not the payer; always verify the original board's payout terms. The scanner does not claim, bid, message or submit work.
+The source report now measures execution compatibility for every observed marketplace: it counts links matching the exact canonical GitHub issue URL format accepted by the coding pipeline, and separately counts links that need another adapter. This prevents an indexed board from being presented as fully executable when its listings point to unsupported task types. The source registry distinguishes boards actually observed in Jobbi's feed from manual-only marketplaces. Upwork is API-approval-only; Contra, Gitcoin, Freelancer, Fiverr, Codementor, HackerOne and Immunefi are not falsely presented as automated integrations. These are tracked as manual/review-only until a permitted official data interface is verified. Jobbi is an index, not the payer; always verify the original board's payout terms. The scanner does not claim, bid, message or submit work.
 
 ## Read-only repository intelligence
 
@@ -120,6 +120,6 @@ The generated patch is only a proposal. Review it and run the project's own test
 ## Scheduled opportunity scans
 After this PR is merged into the default branch, a read-only GitHub Actions workflow will scan every six hours and upload a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.
 
-Daily $5-$10 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
+Daily $3-$5 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
 
 See docs/ARCHITECTURE.md and sandbox/README.md.
