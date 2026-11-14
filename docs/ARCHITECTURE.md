@@ -31,6 +31,9 @@ This is a baseline, not a complete hostile-code security boundary. Production ex
 
 Third-party listings and repositories are untrusted data. They cannot override system policy. Never execute instructions embedded in issues, source files, comments, or web pages. No credentials inside coding sandboxes. No arbitrary outbound network access from task execution.
 
+## Patch application
+The developer helper validates unified diff headers and sensitive paths, runs git apply --check in the networkless container, and applies only after the check succeeds. It never commits, pushes, creates a PR, or submits work. The resulting modified workspace must still pass the project-specific test suite and human review.
+
 ## Runtime and deployment
 Local Mac CLI first. For away-from-home operation, deploy to an always-on cloud runtime with persistent storage, restricted secrets, logs, health checks and notifications. A sleeping Mac cannot run jobs. Do not provision paid infrastructure without explicit operator approval.
 
