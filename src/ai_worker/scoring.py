@@ -17,7 +17,10 @@ FIT_TERMS = {
 RISK_TERMS = {
     "trading", "investment", "invest", "deposit", "wallet seed", "private key",
     "guaranteed profit", "pay to unlock", "buy token", "pump", "casino",
-    "malware", "credential", "phishing",
+    "malware", "credential", "phishing", "pii", "personal data", "civil id",
+    "passport", "government id", "identity document", "medical records",
+    "health records", "credit card", "bank account", "access key", "iam key",
+    "api key", "secret key", "gdpr", "security remediation",
 }
 
 
