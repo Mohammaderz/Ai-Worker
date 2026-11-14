@@ -49,7 +49,7 @@ ai-worker pipeline --gig-id SOURCE:NATIVE_ID
 ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
 ~~~
 
-The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
+The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
 
 ## Example issue workflow
 ~~~bash
