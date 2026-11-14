@@ -1,6 +1,5 @@
-# Build this image ahead of time; task containers run with --pull=never and no network.
-# Pin this base image to a verified digest before using the sandbox for production work.
-FROM python:3.11-slim
+# Pinned multi-architecture manifest digest; update deliberately after verification.
+FROM python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535
 
 WORKDIR /workspace
 ENV HOME=/tmp
