@@ -44,6 +44,16 @@ ollama serve
 
 Keep Ollama running in that terminal. Run the following workflow commands in a second terminal. The model download uses disk space and the model's speed depends on your Mac's memory and hardware.
 
+## Read-only repository intelligence
+
+Before committing to a task, profile its repository to identify languages, manifests, lockfiles, test files and likely QA commands:
+
+~~~bash
+ai-worker profile --workspace .ai-worker/sandboxes/task-123
+~~~
+
+The profiler is bounded and read-only. It never executes repository code, package scripts, build hooks or dependency installation. Commands read from untrusted manifests are recommendations for review, not automatic execution.
+
 ## One-command local task pipeline
 After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only low-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, REPORT.md and test logs.
 
