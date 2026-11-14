@@ -154,3 +154,42 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     assert "did not claim the bounty" in (
         (tmp_path / "proposals" / Path(result.output_dir).name / "REPORT.md").read_text()
     )
+
+
+
+def test_pipeline_holds_high_value_bounties_for_manual_verification(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"],
+            estimated_effort_hours=10.0, to_dict=lambda: {"risk_level": "low"}
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="local", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
+            questions=[], to_dict=lambda: {"diff": "draft"}
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda *args, **kwargs: pytest.fail("high-value task must wait for human verification"),
+    )
+
+    result = pipeline.run_pipeline(
+        brief().url,
+        scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals",
+        reward_amount=1000,
+        currency="USD",
+    )
+    assert result.status == "blocked_for_human_review"
+    assert "above $500" in result.message
