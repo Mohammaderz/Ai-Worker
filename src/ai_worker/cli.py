@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
+from ai_worker.economics import source_priority_adjustments
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
 from ai_worker.report import write_report
@@ -231,15 +232,24 @@ def main() -> int:
         db = connect(args.db)
         try:
             upsert_gigs(db, gigs)
+            history = source_performance(db)
+            adjustments = source_priority_adjustments(history)
             ranked, rejected = [], 0
             for gig in gigs:
                 ok, score, reasons = evaluate(gig, args.min_reward)
                 if ok:
+                    adjustment = adjustments.get(gig.source, 0.0)
+                    if adjustment:
+                        score = round(score + adjustment, 1)
+                        reasons.append(
+                            f"Historical source performance adjustment: {adjustment:+.1f} "
+                            "(ranking only; based on actual submissions and payments)"
+                        )
                     ranked.append((gig, score, reasons))
                 else:
                     rejected += 1
             ranked.sort(key=lambda row: row[1], reverse=True)
-            report = write_report(ranked, args.output, source_history=source_performance(db))
+            report = write_report(ranked, args.output, source_history=history)
         finally:
             db.close()
         print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
