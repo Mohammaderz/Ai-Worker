@@ -14,15 +14,16 @@ def test_ledger_persists_payment_state_and_rail(tmp_path):
         payout_grade="B",
         payment_state="escrowed",
         payment_rail="stripe",
+        acceptance_type="human-review",
         raw={"_jobbi": {"payment_state": "escrowed"}},
     )
     upsert_gigs(db, [gig])
     row = db.execute(
-        "SELECT payment_state, payment_rail FROM gigs WHERE id=?",
+        "SELECT payment_state, payment_rail, acceptance_type FROM gigs WHERE id=?",
         (gig.id,),
     ).fetchone()
     db.close()
-    assert row == ("escrowed", "stripe")
+    assert row == ("escrowed", "stripe", "human-review")
 
 
 def test_ledger_migrates_existing_v01_database(tmp_path):
@@ -41,4 +42,4 @@ def test_ledger_migrates_existing_v01_database(tmp_path):
     db = connect(path)
     columns = {row[1] for row in db.execute("PRAGMA table_info(gigs)")}
     db.close()
-    assert {"payment_state", "payment_rail"}.issubset(columns)
+    assert {"payment_state", "payment_rail", "acceptance_type"}.issubset(columns)
