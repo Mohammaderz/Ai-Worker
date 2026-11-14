@@ -134,6 +134,8 @@ def _safe_patch_path(value: str) -> str:
         or ".git" in path.parts
     ):
         raise PatchError(f"Unsafe path in patch: {value!r}")
+    if path.parts[:2] in {(".github", "workflows"), (".github", "actions")}:
+        raise PatchError("Patch may not modify CI workflow or action definitions")
     if (
         basename in BLOCKED_NAMES
         or basename.startswith(("credentials", "secrets"))
