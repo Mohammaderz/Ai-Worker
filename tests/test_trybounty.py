@@ -61,3 +61,68 @@ def test_bounty_read_adapter_requires_key_and_bounds_limit():
         fetch_open_bounties("")
     with pytest.raises(BountyAPIError, match="1 and 1000"):
         fetch_open_bounties("key", limit=1001)
+
+
+def test_bounty_adapter_rejects_malformed_key_and_unhashable_flow():
+    with pytest.raises(BountyAPIError, match="malformed"):
+        fetch_open_bounties("bad\\nheader")
+
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        calls.append(request)
+        return FakeResponse({
+            "bounties": [
+                {"_id": "bad-flow", "title": "Malformed", "flow": ["claim"], "status": "open"},
+                {"_id": "good", "title": "Valid", "flow": "claim", "status": "open",
+                 "currency": "usd", "payout_cents": 500, "version": 1},
+            ],
+            "has_more": False,
+            "next_cursor": "",
+        })
+
+    items = fetch_open_bounties("test-secret", opener=fake_urlopen)
+    assert [item.id for item in items] == ["good"]
+
+
+def test_bounty_adapter_rejects_unexpected_response_shape():
+    def fake_urlopen(request, timeout):
+        return FakeResponse({"items": []})
+
+    with pytest.raises(BountyAPIError, match="Unexpected"):
+        fetch_open_bounties("test-secret", opener=fake_urlopen)
+
+
+def test_bounty_cli_writes_read_only_report_without_printing_secret(tmp_path, monkeypatch, capsys):
+    import sys
+
+    from ai_worker import cli
+    from ai_worker.sources.trybounty import BountyOpportunity
+
+    secret = "local-secret-value"
+    monkeypatch.setenv("BOUNTY_AGENT_API_KEY", secret)
+    output = tmp_path / "nested" / "bounties.json"
+    monkeypatch.setattr(
+        cli,
+        "fetch_open_bounties",
+        lambda api_key, limit: [
+            BountyOpportunity(
+                id="bounty-1", title="Fix a bug", description="Repair endpoint",
+                verification="Tests pass", category="software", tags=["python"],
+                currency="USD", flow="claim", status="open", version=1,
+                fixed_payout=25.0, budget_guide=None, expires_at=None, created_at=None,
+            )
+        ],
+    )
+    monkeypatch.setattr(
+        sys, "argv",
+        ["ai-worker", "bounty", "scan", "--limit", "5", "--output", str(output)],
+    )
+
+    assert cli.main() == 0
+    captured = capsys.readouterr()
+    assert "Open Bounties fetched: 1" in captured.out
+    assert secret not in captured.out
+    assert secret not in output.read_text(encoding="utf-8")
+    assert '"fixed_payout": 25.0' in output.read_text(encoding="utf-8")
+    assert "No bids, claims, messages, or submissions" in captured.out
