@@ -121,3 +121,19 @@ def test_high_value_bounty_is_flagged_for_manual_verification():
     ok, _score, reasons = evaluate(sample(reward_amount=10000))
     assert ok
     assert any("manual scope and escrow verification" in reason for reason in reasons)
+
+
+def test_board_with_stronger_public_payout_evidence_ranks_higher():
+    _, strong_score, strong_reasons = evaluate(sample(source="Agent Bounties"))
+    _, baseline_score, _ = evaluate(sample(source="unknown-board"))
+    assert strong_score == baseline_score + 12
+    assert any("Board priority bonus: +12" in reason for reason in strong_reasons)
+
+
+def test_algora_ranks_above_unverified_board_without_changing_eligibility():
+    assert evaluate(sample(source="Algora"))[1] > evaluate(sample(source="unknown-board"))[1]
+    assert evaluate(sample(source="unknown-board"))[0]
+
+
+def test_board_priority_is_case_insensitive():
+    assert evaluate(sample(source="AGENT BOUNTIES"))[1] == evaluate(sample(source="agent bounties"))[1]
