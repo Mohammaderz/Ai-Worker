@@ -10,6 +10,7 @@ from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
 from ai_worker.storage import connect, upsert_gigs
+from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
 def main() -> int:
@@ -18,6 +19,12 @@ def main() -> int:
 
     inspect = sub.add_parser("inspect")
     inspect.add_argument("--url", required=True)
+
+    prepare = sub.add_parser("prepare")
+    prepare.add_argument("--url", required=True)
+    prepare.add_argument("--workspace", required=True)
+    prepare.add_argument("--scratch-root", required=True)
+    prepare.add_argument("--timeout", type=int, default=300)
 
     plan = sub.add_parser("plan")
     plan.add_argument("--url", required=True)
@@ -62,6 +69,25 @@ def main() -> int:
             print(f"ERROR: {exc}")
             return 2
         print(json.dumps(brief.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.command == "prepare":
+        try:
+            brief = inspect_github_issue(args.url)
+            result = clone_public_github_repo(
+                brief.repository,
+                args.workspace,
+                scratch_root=args.scratch_root,
+                timeout_seconds=args.timeout,
+            )
+        except (GitHubIssueError, WorkspaceError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps({
+            "workspace": result.path,
+            "repository": result.repository,
+            "message": result.message,
+        }, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "plan":
