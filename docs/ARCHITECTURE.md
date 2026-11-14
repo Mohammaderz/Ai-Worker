@@ -4,11 +4,11 @@
 1. Scout fetches Jobbi's public JSON feed (poll no more than hourly; 5 MiB response cap).
 2. Normalizer maps records into a stable Gig model, including payment state, payment rail and acceptance type.
 3. Risk gate rejects closed/expired tasks, non-agent lanes, unsafe listing URLs, malformed expiry/feed data, unknown claim availability, weak payout evidence, non-escrowed rewards, missing acceptance criteria, unsupported currencies, non-finite/low rewards, and sensitive/high-risk categories.
-4. Analyst scores software fit, reward and payout evidence.
+4. Analyst scores software fit, reward and payout evidence; board-level public payout evidence contributes only a small ranking bonus. It cannot override any hard risk, escrow, currency, claim-availability or reward gate.
 5. SQLite ledger records seen gigs and additive schema migrations.
 6. Reporter writes a ranked Markdown shortlist with original source links and reasons.
 
-The qualification threshold is deliberately strict: USD/USDC, at least the configured reward minimum, B-grade-or-better payout evidence, and an explicitly escrowed reward. This reduces candidate volume; it does not guarantee acceptance or payment.
+The current source-priority policy and its evidence limitations are documented in `docs/MARKET-INTELLIGENCE-2026-11-14.md`. The qualification threshold is deliberately strict: USD/USDC, at least the configured reward minimum, B-grade-or-better payout evidence, and an explicitly escrowed reward. This reduces candidate volume; it does not guarantee acceptance or payment.
 
 ## Read-only task research
 The inspect command supports canonical public GitHub issue URLs only. It fetches issue title, state, body, labels and update time through the public GitHub API. It does not follow links in issue text, execute issue instructions, or post comments. Other boards and URL formats remain manual-review-only until dedicated adapters are added.
