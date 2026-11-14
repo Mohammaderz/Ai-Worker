@@ -5,6 +5,7 @@ No host credentials or environment variables are forwarded into the container.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -75,13 +76,16 @@ def run_in_sandbox(
     if not isinstance(timeout_seconds, int) or not 1 <= timeout_seconds <= 3600:
         raise SandboxError("Timeout must be between 1 and 3600 seconds")
 
+    uid, gid = os.getuid(), os.getgid()
+    if uid == 0:
+        raise SandboxError("Refusing to run task containers from a root-owned host process")
     container_name = f"ai-worker-task-{uuid.uuid4().hex[:16]}"
     mount = f"type=bind,src={target},dst=/workspace,rw"
     argv = [
         "docker", "run", "--rm", "--pull=never", "--name", container_name,
         "--network=none", "--read-only", "--cap-drop=ALL",
         "--security-opt=no-new-privileges:true", "--pids-limit=128",
-        "--memory=1g", "--cpus=1", "--user=65532:65532",
+        "--memory=1g", "--cpus=1", f"--user={uid}:{gid}",
         "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m",
         "--env", "HOME=/tmp",
         "--mount", mount, "--workdir", "/workspace",
