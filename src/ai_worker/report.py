@@ -22,6 +22,7 @@ def write_report(rows: list[tuple[Gig, float, list[str]]], output: str | Path) -
         lines += [
             f"## {i}. {gig.title}",
             "",
+            f"- Gig ID: {gig.id}",
             f"- Score: {score}",
             f"- Reward: {gig.reward_amount:g} {gig.currency}",
             f"- Board: {gig.source or 'Not specified'}",
