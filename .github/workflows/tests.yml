@@ -30,7 +30,7 @@ jobs:
           workspace = root / "node-smoke"
           (workspace / "src").mkdir(parents=True, exist_ok=True)
           (workspace / "src" / "index.ts").write_text(
-              "export const add = (a: number, b: number): number => a + b;\\n",
+              "export const add = (a: number, b: number): number => a + b;\n",
               encoding="utf-8",
           )
           result = run_in_sandbox(
