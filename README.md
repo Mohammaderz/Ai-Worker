@@ -60,6 +60,20 @@ ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
 
 The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
 
+## Track real outcomes and payouts
+The local outcome ledger records progress only after you manually claim or submit work. Only a manually recorded `paid` status with the actual received amount counts as income; listed rewards, accepted work and pending payments are not counted as earnings.
+
+~~~bash
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status claimed
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status in_progress --actual-hours 1.5
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status submitted --actual-hours 2.0
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status accepted
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status paid --gross-received 25 --fees 1.25 --actual-hours 2.0
+ai-worker ledger report
+~~~
+
+Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate and realized net/hour from paid-task hours.
+
 ## Example issue workflow
 ~~~bash
 # Inspect a public issue linked from a bounty listing
