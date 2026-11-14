@@ -10,7 +10,7 @@ from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
-from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
+from ai_worker.storage import connect, outcome_summary, record_outcome, source_performance, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
@@ -239,7 +239,7 @@ def main() -> int:
                 else:
                     rejected += 1
             ranked.sort(key=lambda row: row[1], reverse=True)
-            report = write_report(ranked, args.output)
+            report = write_report(ranked, args.output, source_history=source_performance(db))
         finally:
             db.close()
         print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
