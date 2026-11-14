@@ -80,7 +80,7 @@ def run_in_sandbox(
     if uid == 0:
         raise SandboxError("Refusing to run task containers from a root-owned host process")
     container_name = f"ai-worker-task-{uuid.uuid4().hex[:16]}"
-    mount = f"type=bind,src={target},dst=/workspace,rw"
+    mount = f"type=bind,src={target},dst=/workspace"
     argv = [
         "docker", "run", "--rm", "--pull=never", "--name", container_name,
         "--network=none", "--read-only", "--cap-drop=ALL",
