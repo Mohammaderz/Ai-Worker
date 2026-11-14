@@ -157,3 +157,48 @@ def test_post_submission_rejection_counts_in_acceptance_rate(tmp_path):
     assert summary["accepted_or_paid"] == 1
     assert summary["acceptance_rate"] == 0.5
     db.close()
+
+
+def test_source_economics_uses_only_realized_outcomes_and_requires_sample_size(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    upsert_gigs(db, [
+        Gig(
+            id=f"algora:{number}",
+            title=f"Fix Python issue {number}",
+            url=f"https://github.com/acme/project/issues/{number}",
+            source="algora",
+            currency="USD",
+            reward_amount=25,
+            raw={},
+        )
+        for number in (1, 2, 3)
+    ])
+    for gig_id, gross, fees, hours in (
+        ("algora:1", 25, 1, 2),
+        ("algora:2", 40, 2, 4),
+    ):
+        record_outcome(db, gig_id, "claimed")
+        record_outcome(db, gig_id, "in_progress", actual_hours=hours)
+        record_outcome(db, gig_id, "submitted")
+        record_outcome(db, gig_id, "accepted")
+        record_outcome(db, gig_id, "paid", gross_received=gross, fees=fees)
+    record_outcome(db, "algora:3", "claimed")
+    record_outcome(db, "algora:3", "in_progress", actual_hours=1)
+    record_outcome(db, "algora:3", "submitted")
+    record_outcome(db, "algora:3", "rejected")
+
+    summary = outcome_summary(db)
+    source = next(item for item in summary["by_source"] if item["source"] == "algora")
+    db.close()
+
+    assert source["tracked_tasks"] == 3
+    assert source["submitted_tasks"] == 3
+    assert source["accepted_tasks"] == 2
+    assert source["paid_tasks"] == 2
+    assert source["acceptance_rate"] == pytest.approx(2 / 3, abs=0.001)
+    assert source["gross_received"] == 65
+    assert source["fees"] == 3
+    assert source["net_received"] == 62
+    assert source["paid_task_hours"] == 6
+    assert source["net_per_paid_hour"] == pytest.approx(62 / 6, abs=0.01)
+    assert source["confidence"] == "usable"
