@@ -88,7 +88,7 @@ def main() -> int:
     bounty_scan.add_argument("--limit", type=int, default=100)
     bounty_scan.add_argument("--output", default="reports/bounty-open.json")
 
-    sources = sub.add_parser("sources", help="List observed Jobbi boards and manual-only marketplaces")
+    sources = sub.add_parser("sources", help="List observed Jobbi boards, direct APIs, and manual-only marketplaces")
     sources.add_argument("--limit", type=int, default=1000)
 
     scan = sub.add_parser("scan")
