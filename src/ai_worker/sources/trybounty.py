@@ -90,7 +90,7 @@ def _normalize(item: dict) -> BountyOpportunity | None:
     )
 
 
-def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20) -> list[BountyOpportunity]:
+def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20, opener=urlopen) -> list[BountyOpportunity]:
     """Fetch open Bounties through the official authenticated, read-only list endpoint."""
     if not isinstance(api_key, str) or not api_key.strip():
         raise BountyAPIError("Set BOUNTY_AGENT_API_KEY in your local environment; never paste it into chat or commit it.")
@@ -117,7 +117,7 @@ def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20) -> li
             method="GET",
         )
         try:
-            with urlopen(request, timeout=timeout) as response:
+            with opener(request, timeout=timeout) as response:
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise BountyAPIError("Bounty API response exceeded the 2 MiB safety limit.")
