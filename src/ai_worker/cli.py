@@ -11,6 +11,7 @@ from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
+from ai_worker.sources.registry import filter_sources, source_report
 from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
@@ -79,11 +80,15 @@ def main() -> int:
     ledger_report = ledger_sub.add_parser("report")
     ledger_report.add_argument("--db", default="data/ai_worker.sqlite3")
 
+    sources = sub.add_parser("sources", help="List observed Jobbi boards and manual-only marketplaces")
+    sources.add_argument("--limit", type=int, default=1000)
+
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
     scan.add_argument("--min-reward", type=float, default=5.0)
     scan.add_argument("--db", default="data/ai_worker.sqlite3")
     scan.add_argument("--output", default="reports/latest.md")
+    scan.add_argument("--source", action="append", default=[], help="Marketplace key; repeat to select multiple. Default: all indexed sources.")
 
     sandbox = sub.add_parser("sandbox")
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
@@ -235,17 +240,21 @@ def main() -> int:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
-    if args.command == "scan":
+    if args.command in {"scan", "sources"}:
         try:
             gigs = fetch_gigs(args.limit)
         except FeedError as exc:
             print(f"ERROR: {exc}")
             return 2
+        if args.command == "sources":
+            print(json.dumps(source_report(gigs), ensure_ascii=False, indent=2))
+            return 0
+        selected_gigs = filter_sources(gigs, args.source)
         db = connect(args.db)
         try:
             upsert_gigs(db, gigs)
             ranked, rejected = [], 0
-            for gig in gigs:
+            for gig in selected_gigs:
                 ok, score, reasons = evaluate(gig, args.min_reward)
                 if ok:
                     ranked.append((gig, score, reasons))
@@ -255,7 +264,7 @@ def main() -> int:
             report = write_report(ranked, args.output)
         finally:
             db.close()
-        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
+        print(f"Fetched: {len(gigs)} | Sources selected: {len(selected_gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
         print(f"Report: {report}")
         return 0
 
