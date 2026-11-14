@@ -16,7 +16,7 @@ The runner in ai_worker.sandbox is deliberately restrictive:
 - command arguments are passed directly, without a host shell;
 - timeout cleanup attempts to kill and remove the container.
 
-The image includes Git so model-proposed text patches can be checked with git apply --check and applied only inside the disposable workspace. The developer helper rejects binary patches, path traversal, .git changes, symlinks, submodules, environment files and credential-like paths.
+The image includes Git and pinned pytest 8.4.2 so model-proposed text patches can be checked with git apply --check, applied only inside the disposable workspace, and Python test suites can run offline. The developer helper rejects binary patches, path traversal, .git changes, symlinks, submodules, environment files and credential-like paths.
 
 Example (after creating a disposable directory under .ai-worker/sandboxes/):
 
