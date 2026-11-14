@@ -35,6 +35,22 @@ ollama serve
 
 Keep Ollama running in that terminal. Run the following workflow commands in a second terminal. The model download uses disk space and the model's speed depends on your Mac's memory and hardware.
 
+## One-command local task pipeline
+After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only low-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, REPORT.md and test logs.
+
+~~~bash
+# Refresh the feed and save eligible candidates
+ai-worker scan --limit 1000
+
+# Run one current eligible Jobbi gig (use its exact ID from the report/feed)
+ai-worker pipeline --gig-id algora:OWNER/REPO#123
+
+# Or run a known public GitHub issue directly
+ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
+~~~
+
+The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
+
 ## Example issue workflow
 ~~~bash
 # Inspect a public issue linked from a bounty listing
