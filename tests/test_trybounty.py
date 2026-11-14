@@ -59,7 +59,7 @@ def test_bounty_read_adapter_paginates_and_normalizes_without_bid_or_claim():
 def test_bounty_read_adapter_requires_key_and_bounds_limit():
     with pytest.raises(BountyAPIError, match="BOUNTY_AGENT_API_KEY"):
         fetch_open_bounties("")
-    with pytest.raises(BountyAPIError, match="1 and 1000"):
+    with pytest.raises(BountyAPIError, match="1 to 1000"):
         fetch_open_bounties("key", limit=1001)
 
 
