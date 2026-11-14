@@ -121,3 +121,35 @@ def test_cli_patch_apply_uses_sandbox(monkeypatch, capsys, tmp_path):
     assert captured["diff"] == "diff text"
     assert captured["kwargs"]["scratch_root"] == str(root)
     assert "Patch applied." in capsys.readouterr().out
+
+
+
+def test_cli_prepare_clones_public_issue_repository(monkeypatch, capsys, tmp_path):
+    from types import SimpleNamespace
+
+    root = tmp_path / "scratch"
+    workspace = root / "task-42"
+    captured = {}
+    monkeypatch.setattr(cli, "inspect_github_issue", lambda url: SimpleNamespace(repository="acme/widget"))
+
+    def fake_clone(repository, workspace_arg, **kwargs):
+        captured["repository"] = repository
+        captured["workspace"] = workspace_arg
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(
+            path=str(workspace),
+            repository=repository,
+            message="Cloned",
+        )
+
+    monkeypatch.setattr(cli, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ai-worker", "prepare", "--url", "https://github.com/acme/widget/issues/42",
+         "--workspace", str(workspace), "--scratch-root", str(root)],
+    )
+
+    assert cli.main() == 0
+    assert captured["repository"] == "acme/widget"
+    assert captured["kwargs"]["scratch_root"] == str(root)
+    assert "Cloned" in capsys.readouterr().out
