@@ -30,6 +30,11 @@ ai-worker inspect --url https://github.com/OWNER/REPO/issues/123
 ollama pull qwen2.5-coder:7b
 ollama serve
 ai-worker plan --url https://github.com/OWNER/REPO/issues/123
+
+# Draft a code diff locally, save it, then apply it only in the isolated workspace
+ai-worker patch draft --url https://github.com/OWNER/REPO/issues/123 --workspace .ai-worker/sandboxes/task-123 --diff-output task.patch
+ai-worker patch apply --diff-file task.patch --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes
+ai-worker sandbox run --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes -- pytest -q
 \`\`\`
 
 ## Build the sandbox image
@@ -40,4 +45,4 @@ docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
 ai-worker sandbox run --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes -- python -m compileall .
 \`\`\`
 
-Daily $5-$10 is a target, not a guarantee. The coding agent and task orchestration are still being built. See docs/ARCHITECTURE.md and sandbox/README.md.
+Daily $5-$10 is a target, not a guarantee. The patch drafter proposes a diff; it does not publish or submit it. Review the diff and run the project's tests before any external submission. See docs/ARCHITECTURE.md and sandbox/README.md.
