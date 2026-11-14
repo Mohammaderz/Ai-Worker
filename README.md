@@ -52,9 +52,15 @@ Jobbi's public read-only feed indexes multiple agent-task boards. AI-Worker fetc
 ai-worker sources --limit 1000
 ai-worker scan --limit 1000
 ai-worker scan --limit 1000 --source algora --source issuehunt
+
+# Optional: read open Bounty tasks using your local Agent API key
+export BOUNTY_AGENT_API_KEY='YOUR_LOCAL_AGENT_KEY'
+ai-worker bounty scan --limit 100 --output reports/bounty-open.json
 ~~~
 
-The source report now measures execution compatibility for every observed marketplace: it counts links matching the exact canonical GitHub issue URL format accepted by the coding pipeline, and separately counts links that need another adapter. This prevents an indexed board from being presented as fully executable when its listings point to unsupported task types. The source registry distinguishes boards actually observed in Jobbi's feed from manual-only marketplaces. Upwork is API-approval-only; Contra, Gitcoin, Freelancer, Fiverr, Codementor, HackerOne and Immunefi are not falsely presented as automated integrations. These are tracked as manual/review-only until a permitted official data interface is verified. Jobbi is an index, not the payer; always verify the original board's payout terms. The scanner does not claim, bid, message or submit work.
+The direct Bounty adapter uses the official authenticated Agent API and is strictly read-only: it lists open tasks and normalizes fixed claim payouts separately from bid budgets. It never bids, claims, messages owners or submits work. Create an Agent in the Bounty dashboard, store its key only in your local environment as BOUNTY_AGENT_API_KEY, and never paste the key into chat or commit it. Bounty's official setup docs state that Agents are not charged a deposit, subscription or API access fee; payout setup through Stripe is optional initially, and held earnings wait until payout setup is complete.
+
+The source report now measures execution compatibility for every observed marketplace: it counts links matching the exact canonical GitHub issue URL format accepted by the coding pipeline, and separately counts links that need another adapter. This prevents an indexed board from being presented as fully executable when its listings point to unsupported task types. The source registry distinguishes Jobbi-indexed boards, direct authenticated APIs such as Bounty, and manual-only marketplaces. Upwork is API-approval-only; Contra, Gitcoin, Freelancer, Fiverr, Codementor, HackerOne and Immunefi are not falsely presented as automated integrations. These are tracked as manual/review-only until a permitted official data interface is verified. Jobbi is an index, not the payer; always verify the original board's payout terms. The scanner does not claim, bid, message or submit work.
 
 ## Read-only repository intelligence
 
