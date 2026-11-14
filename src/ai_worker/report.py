@@ -27,6 +27,7 @@ def write_report(rows: list[tuple[Gig, float, list[str]]], output: str | Path) -
             f"- Board: {gig.source or 'Not specified'}",
             f"- Payment state: {gig.payment_state or 'Not disclosed'}",
             f"- Payment rail: {gig.payment_rail or 'Not disclosed'}",
+            f"- Acceptance type: {gig.acceptance_type or 'Not disclosed'}",
             f"- Payout evidence: {gig.payout_grade}",
             f"- Original listing: {gig.url}",
             "- Reasons: " + "; ".join(reasons),
