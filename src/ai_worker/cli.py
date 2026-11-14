@@ -1,6 +1,8 @@
 import argparse
 import json
+from pathlib import Path
 
+from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.report import write_report
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
@@ -21,6 +23,20 @@ def main() -> int:
     plan.add_argument("--url", required=True)
     plan.add_argument("--model")
     plan.add_argument("--timeout", type=int, default=300)
+
+    patch = sub.add_parser("patch")
+    patch_sub = patch.add_subparsers(dest="patch_command", required=True)
+    patch_draft = patch_sub.add_parser("draft")
+    patch_draft.add_argument("--url", required=True)
+    patch_draft.add_argument("--workspace", required=True)
+    patch_draft.add_argument("--model")
+    patch_draft.add_argument("--timeout", type=int, default=600)
+    patch_apply = patch_sub.add_parser("apply")
+    patch_apply.add_argument("--diff-file", required=True)
+    patch_apply.add_argument("--workspace", required=True)
+    patch_apply.add_argument("--scratch-root", required=True)
+    patch_apply.add_argument("--image", default=DEFAULT_IMAGE)
+    patch_apply.add_argument("--timeout", type=int, default=120)
 
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
@@ -56,6 +72,38 @@ def main() -> int:
             return 2
         print(json.dumps(task_plan.to_dict(), ensure_ascii=False, indent=2))
         return 0
+
+    if args.command == "patch" and args.patch_command == "draft":
+        try:
+            brief = inspect_github_issue(args.url)
+            proposal = draft_patch(
+                brief, args.workspace, model=args.model, timeout=args.timeout
+            )
+        except (GitHubIssueError, PatchError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps(proposal.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if proposal.diff else 3
+
+    if args.command == "patch" and args.patch_command == "apply":
+        try:
+            diff = Path(args.diff_file).read_text(encoding="utf-8")
+            result = apply_patch_in_sandbox(
+                diff,
+                args.workspace,
+                scratch_root=args.scratch_root,
+                image=args.image,
+                timeout_seconds=args.timeout,
+            )
+        except (OSError, PatchError, SandboxError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(result.message)
+        if result.changed_files:
+            print("Changed files: " + ", ".join(result.changed_files))
+        if result.stderr:
+            print(result.stderr)
+        return 0 if result.applied else 4
 
     if args.command == "scan":
         try:
