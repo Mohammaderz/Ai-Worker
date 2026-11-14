@@ -16,6 +16,15 @@ Safety-first agent-work pipeline. v0.2 discovers paid software tasks, applies st
 Jobbi is an index, not the payer. Verify original-board terms, claim process, acceptance criteria, and payout conditions. A listed or escrowed reward is not the same as money received.
 
 ## Install and test (macOS, Python 3.11+)
+When the Mac is available, run the guided setup from the repository root:
+
+~~~bash
+bash scripts/bootstrap-mac.sh
+~~~
+
+The script checks Python, Docker Desktop and Ollama, creates the virtual environment, installs the project, builds the sandbox, runs tests and asks before downloading the multi-GB local model. It does not install Homebrew or start paid services.
+
+Manual setup:
 ~~~bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -34,6 +43,36 @@ ollama serve
 ~~~
 
 Keep Ollama running in that terminal. Run the following workflow commands in a second terminal. The model download uses disk space and the model's speed depends on your Mac's memory and hardware.
+
+## One-command local task pipeline
+After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only low-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, REPORT.md and test logs.
+
+~~~bash
+# Refresh the feed and save eligible candidates
+ai-worker scan --limit 1000
+
+# Run one current eligible Jobbi gig (use its exact ID from the report/feed)
+ai-worker pipeline --gig-id SOURCE:NATIVE_ID
+
+# Or run a known public GitHub issue directly
+ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
+~~~
+
+The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
+
+## Track real outcomes and payouts
+The local outcome ledger records progress only after you manually claim or submit work. Only a manually recorded `paid` status with the actual received amount counts as income; listed rewards, accepted work and pending payments are not counted as earnings.
+
+~~~bash
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status claimed
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status in_progress --actual-hours 1.5
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status submitted --actual-hours 2.0
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status accepted
+ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status paid --gross-received 25 --fees 1.25 --actual-hours 2.0
+ai-worker ledger report
+~~~
+
+Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate and realized net/hour from paid-task hours.
 
 ## Example issue workflow
 ~~~bash

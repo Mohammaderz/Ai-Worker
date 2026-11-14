@@ -153,3 +153,42 @@ def test_cli_prepare_clones_public_issue_repository(monkeypatch, capsys, tmp_pat
     assert captured["repository"] == "acme/widget"
     assert captured["kwargs"]["scratch_root"] == str(root)
     assert "Cloned" in capsys.readouterr().out
+
+
+
+def test_cli_pipeline_refreshes_and_resolves_jobbi_gig(monkeypatch, capsys, tmp_path):
+    from types import SimpleNamespace
+
+    captured = {}
+    fake_gig = SimpleNamespace(
+        id="algora:task-42",
+        url="https://github.com/acme/widget/issues/42",
+        reward_amount=25,
+        currency="USD",
+    )
+    fake_db = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(cli, "fetch_gigs", lambda limit: ["fresh-gig"])
+    monkeypatch.setattr(cli, "connect", lambda path: fake_db)
+    monkeypatch.setattr(cli, "upsert_gigs", lambda db, gigs: captured.update(db=db, gigs=gigs))
+    monkeypatch.setattr(cli, "resolve_eligible_gig", lambda gig_id, gigs, min_reward: fake_gig)
+
+    def fake_pipeline(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(status="ready_for_human_review", to_dict=lambda: {"status": "ready_for_human_review"})
+
+    monkeypatch.setattr(cli, "run_pipeline", fake_pipeline)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ai-worker", "pipeline", "--gig-id", "algora:task-42",
+         "--db", str(tmp_path / "ledger.sqlite3"),
+         "--scratch-root", str(tmp_path / "scratch"),
+         "--output-root", str(tmp_path / "proposals")],
+    )
+
+    assert cli.main() == 0
+    assert captured["gigs"] == ["fresh-gig"]
+    assert captured["url"] == fake_gig.url
+    assert captured["kwargs"]["reward_amount"] == 25
+    assert captured["kwargs"]["currency"] == "USD"
+    assert "ready_for_human_review" in capsys.readouterr().out

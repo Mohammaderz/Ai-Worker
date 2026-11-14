@@ -30,6 +30,11 @@ The patch helper validates unified diff paths and blocks traversal, .git changes
 
 This is a baseline, not a complete hostile-code security boundary. Production execution should use a dedicated VM or equivalent hardened runtime, a digest-pinned image, immutable audit logs, and a separate dependency-preparation stage. Do not mount the Docker socket, home directory, SSH agent, cloud credentials, or secrets into task containers.
 
+## End-to-end local pipeline
+The `pipeline` command connects the read-only Jobbi scout to task execution. It refreshes and revalidates a selected gig when invoked by ID, or accepts a canonical public GitHub issue URL. It rejects stale/closed issues, clones the public repository into a new scratch workspace, requests a structured local plan and patch, and stores a review package. It applies a patch only when the plan has no blockers, risk is not high, and the patch proposal has no unanswered questions. Python syntax and detected pytest suites run in the networkless sandbox. It records test logs and exit codes. It does not install project dependencies from untrusted task content.
+
+A successful local pipeline status means only that its configured checks passed. It is not proof that the bounty maintainer will accept the patch or pay the reward. Non-Python projects currently require a project-specific runner before automated testing can be considered complete.
+
 ## Planned next stages
 - Manager: orchestration, budgets, state, policy enforcement and approval queue.
 - Researcher: adapters for additional original boards; verify task scope, claim rules and payout evidence.
@@ -42,6 +47,9 @@ Third-party listings, issues and repositories are untrusted data. They cannot ov
 
 ## Scheduled scans
 After merge to the default branch, a GitHub Actions workflow runs the public read-only scout every six hours. It restores a short-lived SQLite cache and publishes the report and ledger as 14-day artifacts. It does not claim tasks, message clients or submit work.
+
+## Outcome and payout ledger
+A local SQLite task_outcomes table tracks claimed, in-progress, submitted, accepted, rejected and paid states with cumulative hours, actual gross receipts, fees, timestamps and notes. Transitions are constrained; only a paid record with a real gross amount contributes to earnings. Reports calculate acceptance rate and realized net/hour using paid-task hours, separately from hours spent on unpaid work.
 
 ## Metrics
 Track qualified opportunities, estimated value/hour, verified submissions, acceptance rate, gross rewards, fees, net paid rewards and payout latency. Listed rewards are not earnings.

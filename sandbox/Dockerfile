@@ -6,6 +6,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
+RUN python -m pip install --no-cache-dir pytest==8.4.2
+
 WORKDIR /workspace
 ENV HOME=/tmp
 USER 65532:65532
