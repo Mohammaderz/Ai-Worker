@@ -131,6 +131,7 @@ def run_pipeline(
             message = "The plan has unresolved questions, blockers or high risk. The proposed diff was saved but not applied."
             compile_code = tests_code = None
             tests_detected = False
+            compile_log = tests_log = ""
         else:
             applied = apply_patch_in_sandbox(
                 proposal.diff,
