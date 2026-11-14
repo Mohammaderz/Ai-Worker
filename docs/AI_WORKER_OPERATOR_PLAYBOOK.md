@@ -151,3 +151,62 @@ Use these labels precisely:
 - **Accepted**: payer/platform explicitly accepted the work.
 - **Paid**: funds actually received and verified by user-provided or connected evidence.
 Never collapse these stages into "done" or "earned".
+
+
+## 11. Field research: real agent work, founder outcomes, and lessons (2026-11-14)
+These are reported case studies and platform dashboards, not audited guarantees. Treat self-reported founder revenue as claims by the publisher; do not extrapolate it to our expected income.
+
+### Case studies reviewed
+1. **Autonomous AI agent / Olivia Craft (Indie Hackers, June 2026)**
+   - Reported 10 weeks of operation, 2 sales, $54 total; both sales were a $27 developer-productivity pack.
+   - The reported conversion path was a technical article -> public GitHub repository -> specific paid product.
+   - 30+ articles did not create proportional sales; X replies hit rate limits/403 and produced no verified conversions.
+   - The author explicitly distinguished conversations/interest from buyers with urgent needs.
+   - Source: https://www.indiehackers.com/post/i-am-an-autonomous-ai-agent-10-weeks-2-sales-54-here-is-what-i-actually-learned-300698bdfe
+   - Engineering lesson: measure qualified opportunities, accepted work, cleared payments and source attribution; never optimize raw output/content volume.
+2. **Lancer / Ivan Nedelkovski (Indie Hackers, July 29 2026)**
+   - Founder described validating an Upwork lead-generation pain he personally experienced, building a weekend MVP, dogfooding it and testing with friends before commercializing.
+   - Interview reports $10K MRR within two months, later $20K MRR with a two-person team. These are interview claims, not audited financial statements.
+   - The article says commercial-grade coverage and account safety took substantially longer than the weekend prototype; scraping/automation and account bans were major challenges.
+   - Source: https://www.indiehackers.com/post/tech/exiting-his-agency-and-hitting-10k-mrr-within-60-days-of-launching-his-saas-sTo5m9qfhxXbruvhBIyH
+   - Engineering lesson: validate one narrow real workflow first; do not use unauthorized scraping or automation that risks marketplace accounts.
+3. **Hands-on AI agent job-board test (DEV Community, Sep 1 2026)**
+   - Author reported testing seven platforms. Taskmarket: 192/192 tasks marked completed/awarded, but no cleared withdrawal verified at time of writing. MoltJobs: seven $5 jobs visible, but zero paid to that tester. Execution Market: settlement worked, but required an on-demand signing wallet. Other tested platforms did not produce a cleared payment in that test.
+   - Source: https://dev.to/andy_1288abe4f555306d3f98/did-it-pay-live-status-of-ai-agent-job-boards-1-sep-2026-4na8
+   - Engineering lesson: track task completion, reward award, withdrawal eligibility, and actual receipt as separate states; validate payout requirements before spending effort.
+4. **Olas Mech economy official dashboard (snapshot Nov 14 2026)**
+   - Dashboard showed about 12.28M requests and 10.35M deliveries across the whole Mech economy; total task payments about $111,088 gross and realised/claimed earnings about $103,802 at the displayed snapshot. These are ecosystem-wide aggregate figures, not a typical agent's earnings or a forecast.
+   - Source: https://olas.network/agent-economies/mech
+   - Engineering lesson: agent-to-agent services are a possible later channel, but evaluate demand, delivery quality, payment settlement, network and wallet requirements separately.
+5. **Operating 14 SaaS products with agents (Indie Hackers, 2026)**
+   - Founder reported agents handled roughly 70% of routine operations after a month, reducing personal hands-on work from around 60 to 15–20 hours/week. The report also described publishing failures, false confidence in analytics, over-automation attempts to increase ad budgets, and platform lockouts.
+   - Source: https://www.indiehackers.com/post/how-i-run-14-saas-products-with-ai-agents-one-month-report-49075e9757
+   - Engineering lesson: use approval gates for irreversible/budget/security actions; verify revenue metrics and platform permissions; maintain logs and rollback/stop controls.
+6. **Indie hacker failure lessons**
+   - A founder's retrospective on five failed side projects emphasized validating a known painful problem, avoiding long builds without evidence, and choosing a market/channel with reachable buyers.
+   - Source: https://www.indiehackers.com/post/lessons-learned-from-5-failed-side-hustles-ed03623f0d
+   - Engineering lesson: validate demand before building broad features; kill or pause channels that produce activity but no paid conversion.
+
+### Current market snapshot (Jobbi index, Nov 14 2026)
+- Jobbi's live report displayed 676 open gigs, $20 median reward among priced USD/USDC/USDT gigs, $44,918 total dollar-denominated reward on offer, and 161 gigs at $50 or more.
+- This is advertised supply, not completed work, acceptance probability, money received, or a forecast. Board payout methods and evidence grades vary substantially.
+- Source: https://jobbi.org/gigs/report/
+- Engineering lesson: use reward size only after validating payer, payout method, escrow/claim rules, acceptance criteria, platform fees, and realistic work hours.
+
+### New measurable improvements to implement
+1. **Payment-state machine:** represent `discovered -> qualified -> prepared -> approved -> submitted -> accepted/awarded -> withdrawable -> paid`; allow rejection/expired/disputed states. Never infer a later state from an earlier one.
+2. **Payout readiness before work:** record payout rail, supported country/account, minimum withdrawal, KYC requirement, wallet signer requirement, network/token, fees, settlement delay, and evidence URL before qualifying a task. Mark unknown fields as unknown, not safe.
+3. **Net economics:** calculate advertised gross, platform fee, network fee, expected net (only where fees are known), actual net, active hours, and net/hour. Do not invent acceptance probabilities. Keep estimates separate from realised metrics.
+4. **Attribution:** store source board, original listing URL, discovery timestamp, proposal/claim timestamp, submission timestamp, acceptance timestamp, withdrawal timestamp, payment timestamp, and evidence. Report which sources actually lead to paid work.
+5. **Conversion-first dashboard:** count qualified opportunities, prepared proposals, approved submissions, acceptances, withdrawable balances, cleared payments, and net/hour. Raw scans, commits, articles, and task completions are activity metrics, not success metrics.
+6. **Narrow-first strategy:** choose one task category and one or two payout-verified platforms first; complete an end-to-end paid cycle before expanding to more marketplaces or autonomous product sales.
+7. **Human-in-the-loop:** the agent can rank, draft, code, test and prepare. Keep user approval for claims, client communication, external submissions, contracts, spend, account security, and payments.
+8. **Policy-aware access:** prefer documented APIs and platform-granted permissions. Do not evade rate limits, anti-bot protections, identity checks, or account restrictions. Stop on 403/429 or explicit platform warnings; do not rotate identities/proxies to bypass restrictions.
+9. **Evidence-backed public portfolio:** publish only genuine, reviewable proof-of-work (sanitized code, tests, changelogs, demos) when the user approves. Add source attribution to any public content. Do not publish private client code or claim AI work as human-only.
+10. **Daily improvement without fabricated autonomy:** when an authorized runtime is actually running, collect errors and outcomes, create a prioritized improvement proposal, run tests, and report a concise changelog. A ChatGPT conversation being closed or a Mac being online does not itself prove background execution.
+
+### Research caveats
+- Indie Hacker and DEV Community posts are individual self-reports, not audited accounts. Use them as hypotheses and operational lessons, not proof of representative earnings.
+- Official Olas dashboard figures are aggregate ecosystem totals and may include activity from many agents and payment rails.
+- Jobbi counts are a changing index snapshot; reward listings are not cash flow.
+- Recheck source terms, APIs, fee schedules, payout rules, and current figures before implementation or any user commitment.
