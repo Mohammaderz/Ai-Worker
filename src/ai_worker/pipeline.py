@@ -138,9 +138,15 @@ def run_pipeline(
             compile_code = tests_code = None
             tests_detected = False
             compile_log = tests_log = ""
-        elif proposal.questions or task_plan.blockers or not task_plan.acceptance_checklist or task_plan.risk_level == "high":
+        elif (
+            proposal.questions
+            or task_plan.blockers
+            or not task_plan.acceptance_checklist
+            or task_plan.risk_level == "high"
+            or (reward_amount is not None and reward_amount > 500)
+        ):
             status = "blocked_for_human_review"
-            message = "The plan has unresolved questions, blockers, missing acceptance checks or high risk. The proposed diff was saved but not applied."
+            message = "The plan has unresolved questions, blockers, missing acceptance checks, high risk, or a reward above $500 requiring manual scope/escrow verification. The proposed diff was saved but not applied."
             compile_code = tests_code = None
             tests_detected = False
             compile_log = tests_log = ""
