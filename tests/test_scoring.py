@@ -70,3 +70,11 @@ def test_reject_invalid_expiry():
 
 def test_risk_word_matching_does_not_flag_unrelated_substrings():
     assert evaluate(sample(title="Investigate a Python bug"))[0]
+
+
+def test_reject_unknown_claim_availability():
+    assert not evaluate(sample(claims_open=None))[0]
+
+
+def test_reject_invalid_minimum_reward():
+    assert not evaluate(sample(), min_reward=float("nan"))[0]
