@@ -104,3 +104,8 @@ def test_feed_normalizer_handles_malformed_reward_object():
 def test_rejects_sensitive_identity_and_credential_tasks():
     assert not evaluate(sample(summary="Implement PII export and civil ID upload"))[0]
     assert not evaluate(sample(title="Rotate AWS IAM key and secret key"))[0]
+
+
+def test_rejects_wallet_bonds_and_high_risk_exploit_tasks():
+    assert not evaluate(sample(summary="Connect wallet and post refundable bond"))[0]
+    assert not evaluate(sample(title="Remote code execution exploit development"))[0]
