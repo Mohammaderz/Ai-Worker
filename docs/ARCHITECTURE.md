@@ -48,5 +48,8 @@ Third-party listings, issues and repositories are untrusted data. They cannot ov
 ## Scheduled scans
 After merge to the default branch, a GitHub Actions workflow runs the public read-only scout every six hours. It restores a short-lived SQLite cache and publishes the report and ledger as 14-day artifacts. It does not claim tasks, message clients or submit work.
 
+## Outcome and payout ledger
+A local SQLite task_outcomes table tracks claimed, in-progress, submitted, accepted, rejected and paid states with cumulative hours, actual gross receipts, fees, timestamps and notes. Transitions are constrained; only a paid record with a real gross amount contributes to earnings. Reports calculate acceptance rate and realized net/hour using paid-task hours, separately from hours spent on unpaid work.
+
 ## Metrics
 Track qualified opportunities, estimated value/hour, verified submissions, acceptance rate, gross rewards, fees, net paid rewards and payout latency. Listed rewards are not earnings.
