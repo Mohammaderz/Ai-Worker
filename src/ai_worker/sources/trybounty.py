@@ -106,7 +106,7 @@ def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20, opene
     while len(results) < limit:
         pages_fetched += 1
         if pages_fetched > 20:
-            raise BountyAPIError("Bounty API exceeded the 20-page safety cap; increase limit only after reviewing pagination behavior.")
+            raise BountyAPIError("Bounty API exceeded the 20-page safety cap; check the API cursor behavior before retrying.")
         page_limit = min(100, limit - len(results))
         params = {"status": "open", "limit": page_limit}
         if cursor:
