@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
+from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
 from ai_worker.report import write_report
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
@@ -45,6 +46,18 @@ def main() -> int:
     patch_apply.add_argument("--scratch-root", required=True)
     patch_apply.add_argument("--image", default=DEFAULT_IMAGE)
     patch_apply.add_argument("--timeout", type=int, default=120)
+
+    pipeline = sub.add_parser("pipeline")
+    pipeline_target = pipeline.add_mutually_exclusive_group(required=True)
+    pipeline_target.add_argument("--url")
+    pipeline_target.add_argument("--gig-id")
+    pipeline.add_argument("--db", default="data/ai_worker.sqlite3")
+    pipeline.add_argument("--min-reward", type=float, default=5.0)
+    pipeline.add_argument("--scratch-root", default=".ai-worker/sandboxes")
+    pipeline.add_argument("--output-root", default=".ai-worker/proposals")
+    pipeline.add_argument("--image", default=DEFAULT_IMAGE)
+    pipeline.add_argument("--model")
+    pipeline.add_argument("--timeout", type=int, default=600)
 
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
@@ -137,6 +150,32 @@ def main() -> int:
         if result.stderr:
             print(result.stderr)
         return 0 if result.applied else 4
+
+    if args.command == "pipeline":
+        try:
+            issue_url = args.url
+            if args.gig_id:
+                gigs = fetch_gigs(1000)
+                db = connect(args.db)
+                try:
+                    upsert_gigs(db, gigs)
+                finally:
+                    db.close()
+                gig = resolve_eligible_gig(args.gig_id, gigs, min_reward=args.min_reward)
+                issue_url = gig.url
+            result = run_pipeline(
+                issue_url,
+                scratch_root=args.scratch_root,
+                output_root=args.output_root,
+                image=args.image,
+                model=args.model,
+                timeout=args.timeout,
+            )
+        except (FeedError, PipelineError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+        return 0 if result.status in {"ready_for_human_review", "static_check_passed_no_tests"} else 3
 
     if args.command == "scan":
         try:
