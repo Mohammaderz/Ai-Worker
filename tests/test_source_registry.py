@@ -41,3 +41,12 @@ def test_filter_sources_selects_marketplace_without_losing_all_mode():
     assert [x.id for x in filter_sources(items, ["algora", "bountyhub"])] == ["a", "b"]
     assert len(filter_sources(items, ["all"])) == 3
     assert len(filter_sources(items)) == 3
+
+
+def test_source_report_keeps_direct_api_separate_from_jobbi_and_manual_sources():
+    result = source_report([gig("algora", "a")])
+    direct = {row["key"]: row for row in result["direct_api_sources"]}
+    assert direct["trybounty"]["mode"] == "official_agent_api"
+    assert direct["trybounty"]["status"] == "api_key_required"
+    assert "trybounty" not in {row["key"] for row in result["indexed_sources_observed"]}
+    assert "trybounty" not in {row["key"] for row in result["manual_only_sources"]}
