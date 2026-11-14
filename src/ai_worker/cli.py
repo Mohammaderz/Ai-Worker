@@ -6,6 +6,7 @@ from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
 from ai_worker.report import write_report
+from ai_worker.repo_profile import profile_repository
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
@@ -17,6 +18,9 @@ from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ai-worker")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    profile = sub.add_parser("profile", help="Inspect a repository and recommend safe QA checks")
+    profile.add_argument("--workspace", required=True)
 
     inspect = sub.add_parser("inspect")
     inspect.add_argument("--url", required=True)
@@ -91,6 +95,15 @@ def main() -> int:
     sandbox_run.add_argument("task_command", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
+    if args.command == "profile":
+        try:
+            result = profile_repository(args.workspace)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
     if args.command == "inspect":
         try:
             brief = inspect_github_issue(args.url)
