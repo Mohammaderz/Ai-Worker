@@ -10,12 +10,23 @@ import math
 from dataclasses import asdict, dataclass
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
 API_ROOT = "https://api.trybounty.ai"
 USER_AGENT = "AI-Worker/0.2 (+https://github.com/Mohammaderz/AI-Worker)"
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Never forward an Agent bearer token through an HTTP redirect."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _safe_urlopen(request: Request, timeout: int):
+    return build_opener(_NoRedirectHandler).open(request, timeout=timeout)
 
 
 class BountyAPIError(RuntimeError):
@@ -90,7 +101,7 @@ def _normalize(item: dict) -> BountyOpportunity | None:
     )
 
 
-def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20, opener=urlopen) -> list[BountyOpportunity]:
+def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20, opener=_safe_urlopen) -> list[BountyOpportunity]:
     """Fetch open Bounties through the official authenticated, read-only list endpoint."""
     if not isinstance(api_key, str) or not api_key.strip():
         raise BountyAPIError("Set BOUNTY_AGENT_API_KEY in your local environment; never paste it into chat or commit it.")
