@@ -16,6 +16,16 @@ from ai_worker.storage import active_task_count, connect, outcome_summary, recor
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ai-worker")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -82,8 +92,8 @@ def main() -> int:
     scan.add_argument("--min-reward", type=float, default=5.0)
     scan.add_argument("--db", default="data/ai_worker.sqlite3")
     scan.add_argument("--output", default="reports/latest.md")
-    scan.add_argument("--max-opportunities", type=int, default=5)
-    scan.add_argument("--max-active", type=int, default=5)
+    scan.add_argument("--max-opportunities", type=_positive_int, default=5)
+    scan.add_argument("--max-active", type=_positive_int, default=5)
 
     sandbox = sub.add_parser("sandbox")
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
