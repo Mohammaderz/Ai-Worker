@@ -100,4 +100,4 @@ After this PR is merged into the default branch, a read-only GitHub Actions work
 
 Daily $5-$10 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
 
-See docs/ARCHITECTURE.md and sandbox/README.md.
+See docs/ARCHITECTURE.md, docs/MARKET-INTELLIGENCE-2026-11-14.md and sandbox/README.md.
