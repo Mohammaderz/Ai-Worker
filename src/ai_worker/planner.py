@@ -82,7 +82,8 @@ def _validate_local_host(host: str) -> str:
         raise OllamaError("Invalid Ollama endpoint port") from exc
     if not 1 <= port <= 65535:
         raise OllamaError("Invalid Ollama endpoint port")
-    return f"http://{parsed.hostname}:{port}/api/chat"
+    authority = f"[{parsed.hostname}]" if parsed.hostname == "::1" else parsed.hostname
+    return f"http://{authority}:{port}/api/chat"
 
 
 def _validate_plan(data: object) -> dict:
