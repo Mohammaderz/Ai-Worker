@@ -10,7 +10,7 @@ from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
-from ai_worker.storage import connect, upsert_gigs
+from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
@@ -58,6 +58,21 @@ def main() -> int:
     pipeline.add_argument("--image", default=DEFAULT_IMAGE)
     pipeline.add_argument("--model")
     pipeline.add_argument("--timeout", type=int, default=600)
+
+    ledger = sub.add_parser("ledger")
+    ledger_sub = ledger.add_subparsers(dest="ledger_command", required=True)
+    ledger_record = ledger_sub.add_parser("record")
+    ledger_record.add_argument("--gig-id", required=True)
+    ledger_record.add_argument("--status", required=True, choices=[
+        "claimed", "in_progress", "submitted", "accepted", "rejected", "paid"
+    ])
+    ledger_record.add_argument("--actual-hours", type=float)
+    ledger_record.add_argument("--gross-received", type=float)
+    ledger_record.add_argument("--fees", type=float, default=0.0)
+    ledger_record.add_argument("--notes", default="")
+    ledger_record.add_argument("--db", default="data/ai_worker.sqlite3")
+    ledger_report = ledger_sub.add_parser("report")
+    ledger_report.add_argument("--db", default="data/ai_worker.sqlite3")
 
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
@@ -182,6 +197,28 @@ def main() -> int:
             return 2
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
         return 0 if result.status in {"ready_for_human_review", "static_check_passed_no_tests"} else 3
+
+    if args.command == "ledger":
+        db = connect(args.db)
+        try:
+            if args.ledger_command == "record":
+                record_outcome(
+                    db,
+                    args.gig_id,
+                    args.status,
+                    actual_hours=args.actual_hours,
+                    gross_received=args.gross_received,
+                    fees=args.fees,
+                    notes=args.notes,
+                )
+            summary = outcome_summary(db)
+        except (ValueError, OSError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        finally:
+            db.close()
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 0
 
     if args.command == "scan":
         try:
