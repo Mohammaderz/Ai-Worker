@@ -175,7 +175,7 @@ def test_cli_pipeline_refreshes_and_resolves_jobbi_gig(monkeypatch, capsys, tmp_
     def fake_pipeline(url, **kwargs):
         captured["url"] = url
         captured["kwargs"] = kwargs
-        return SimpleNamespace(to_dict=lambda: {"status": "ready_for_human_review"})
+        return SimpleNamespace(status="ready_for_human_review", to_dict=lambda: {"status": "ready_for_human_review"})
 
     monkeypatch.setattr(cli, "run_pipeline", fake_pipeline)
     monkeypatch.setattr(
