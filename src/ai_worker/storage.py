@@ -152,6 +152,7 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
     gross = sum(float(row[2] or 0) for row in paid)
     fees = sum(float(row[3] or 0) for row in paid)
     hours = sum(float(row[1] or 0) for row in rows)
+    paid_hours = sum(float(row[1] or 0) for row in paid)
     submitted = counts["submitted"] + counts["accepted"] + counts["paid"] + counts["rejected"]
     accepted = counts["accepted"] + counts["paid"]
     return {
@@ -164,7 +165,8 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
         "gross_received": round(gross, 2),
         "fees": round(fees, 2),
         "net_received": round(gross - fees, 2),
-        "tracked_hours": round(hours, 2),
-        "net_received_per_tracked_hour": round((gross - fees) / hours, 2) if hours else None,
+        "tracked_hours_all_tasks": round(hours, 2),
+        "paid_task_hours": round(paid_hours, 2),
+        "net_received_per_paid_hour": round((gross - fees) / paid_hours, 2) if paid_hours else None,
         "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded.",
     }
