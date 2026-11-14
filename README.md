@@ -72,7 +72,7 @@ ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status paid --gross-received
 ai-worker ledger report
 ~~~
 
-Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate and realized net/hour from paid-task hours.
+Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate, realized net/hour from paid-task hours, and average/median payout latency.
 
 ## Example issue workflow
 ~~~bash
