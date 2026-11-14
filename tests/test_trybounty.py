@@ -156,3 +156,13 @@ def test_bounty_adapter_rejects_repeated_pagination_cursor():
     with pytest.raises(BountyAPIError, match="missing or repeated"):
         fetch_open_bounties("test-secret", opener=fake_urlopen)
     assert calls == 2
+
+
+def test_bounty_adapter_refuses_redirects_for_bearer_token_safety():
+    from ai_worker.sources.trybounty import _NoRedirectHandler
+
+    handler = _NoRedirectHandler()
+    result = handler.redirect_request(
+        None, None, 302, "Found", {}, "https://attacker.example/collect"
+    )
+    assert result is None
