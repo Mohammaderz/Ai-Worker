@@ -48,12 +48,14 @@ def _safe_listing_url(value: str) -> bool:
 
 
 def evaluate(gig: Gig, min_reward: float = 5.0) -> tuple[bool, float, list[str]]:
+    if not math.isfinite(min_reward) or min_reward < 0:
+        return False, 0, ["Configured minimum reward is invalid"]
     text = f"{gig.title} {gig.summary} {' '.join(gig.tags)}".lower()
 
     if gig.lane != "agent":
         return False, 0, ["Not marked for agent execution"]
-    if gig.claims_open is False:
-        return False, 0, ["Claims are closed"]
+    if gig.claims_open is not True:
+        return False, 0, ["Claim availability is not explicitly confirmed"]
     if not _safe_listing_url(gig.url):
         return False, 0, ["Listing URL is not a safe HTTPS link"]
     if gig.expires:
