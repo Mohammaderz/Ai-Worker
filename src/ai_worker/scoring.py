@@ -43,7 +43,7 @@ RISK_TERMS = {
 
 
 def _contains_term(text: str, term: str) -> bool:
-    pattern = r"(?<!\\w)" + re.escape(term).replace(r"\\ ", r"\\s+") + r"(?!\\w)"
+    pattern = r"(?<!\w)" + re.escape(term).replace(r"\ ", r"\s+") + r"(?!\w)"
     return re.search(pattern, text) is not None
 
 
@@ -105,7 +105,7 @@ def evaluate(gig: Gig, min_reward: float = 5.0) -> tuple[bool, float, list[str]]
         len(title_words) < 2
         or len(summary) < 25
         or summary.lower() == gig.title.strip().lower()
-        or re.fullmatch(r"/bounty(?:\\s+\\$?\\d+(?:\\.\\d{1,2})?)?", summary, re.IGNORECASE)
+        or re.fullmatch(r"/bounty(?:\s+\$?\d+(?:\.\d{1,2})?)?", summary, re.IGNORECASE)
     ):
         return False, 0, ["Task title or description is too thin to assess; likely test/spam listing"]
 
