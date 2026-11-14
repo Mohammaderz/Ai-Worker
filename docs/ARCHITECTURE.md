@@ -16,6 +16,9 @@ The inspect command supports canonical public GitHub issue URLs only. It fetches
 ## Workspace preparation
 The prepare command derives the repository from a validated public GitHub issue URL and performs a shallow HTTPS clone. It disables Git hooks, submodule recursion, LFS smudging, interactive prompts and host-level Git configuration/credentials. Workspaces must be new children of the configured scratch root. Private repositories are not supported by this path.
 
+## Repository intelligence and QA discovery
+The `profile` command performs a bounded, symlink-safe inventory of source languages, common manifests, lockfiles and test-like files. It reads only a small bounded `package.json` to report available scripts. It never executes repository code, package scripts, build hooks or dependency installation. Recommended commands from third-party manifests are explicitly marked for manual review. This gives the operator a repository-specific QA map without treating project configuration as trusted executable instructions.
+
 ## Local AI planning and patch drafting
 The plan command sends only issue title, body and labels to a local Ollama endpoint bound to loopback. The planner requests a JSON-schema-constrained plan, validates every field and blocks HTTP redirects.
 
