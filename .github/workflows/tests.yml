@@ -35,3 +35,35 @@ jobs:
           if result.exit_code != 0 or result.stdout.strip() != "sandbox-ok":
               raise SystemExit(result.stderr or f"sandbox exit code: {result.exit_code}")
           PY
+      - name: Smoke-test patch application
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          from ai_worker.developer import apply_patch_in_sandbox
+
+          root = Path(".ci-sandboxes").resolve()
+          workspace = root / "patch-smoke"
+          workspace.mkdir(parents=True, exist_ok=True)
+          subprocess.run(["git", "init"], cwd=workspace, check=True, capture_output=True)
+          subprocess.run(["git", "config", "user.email", "ci@example.invalid"], cwd=workspace, check=True)
+          subprocess.run(["git", "config", "user.name", "AI-Worker CI"], cwd=workspace, check=True)
+          target = workspace / "hello.txt"
+          target.write_text("before\n", encoding="utf-8")
+          subprocess.run(["git", "add", "hello.txt"], cwd=workspace, check=True)
+          subprocess.run(["git", "commit", "-m", "seed"], cwd=workspace, check=True, capture_output=True)
+          diff = """diff --git a/hello.txt b/hello.txt
+          index 1111111..2222222 100644
+          --- a/hello.txt
+          +++ b/hello.txt
+          @@ -1 +1 @@
+          -before
+          +after
+          """
+          result = apply_patch_in_sandbox(diff, workspace, scratch_root=root, timeout_seconds=30)
+          if not result.applied:
+              raise SystemExit(result.stderr or result.message)
+          if target.read_text(encoding="utf-8") != "after\n":
+              raise SystemExit("sandbox patch application did not update the target file")
+          print("patch-apply-ok")
+          PY
