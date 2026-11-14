@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+
 @dataclass(slots=True)
 class Gig:
     id: str
@@ -12,6 +13,8 @@ class Gig:
     reward_amount: float | None = None
     currency: str = ""
     payout_grade: str = ""
+    payment_state: str = ""
+    payment_rail: str = ""
     acceptance: str = ""
     expires: str = ""
     claims_open: bool | None = None
@@ -24,7 +27,7 @@ class Gig:
         reward = meta.get("reward") or {}
         try:
             amount = float(reward["amount"]) if reward.get("amount") is not None else None
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             amount = None
         claims_open = meta.get("claims_open")
         if not isinstance(claims_open, bool):
@@ -42,6 +45,8 @@ class Gig:
             reward_amount=amount,
             currency=str(reward.get("currency") or "").upper(),
             payout_grade=str(meta.get("payout_grade") or "").upper(),
+            payment_state=str(meta.get("payment_state") or "").lower(),
+            payment_rail=str(reward.get("rail") or ""),
             acceptance=str(meta.get("acceptance") or ""),
             expires=str(meta.get("expires") or ""),
             claims_open=claims_open,
