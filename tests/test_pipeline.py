@@ -75,7 +75,7 @@ def test_pipeline_blocks_unresolved_questions_without_applying_patch(monkeypatch
     monkeypatch.setattr(
         pipeline, "plan_github_issue",
         lambda *args, **kwargs: SimpleNamespace(
-            risk_level="low", blockers=[], estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"}
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"], estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"}
         ),
     )
     monkeypatch.setattr(
@@ -113,7 +113,7 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline, "plan_github_issue",
         lambda *args, **kwargs: SimpleNamespace(
-            risk_level="low", blockers=[], estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"}
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"], estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"}
         ),
     )
     monkeypatch.setattr(
