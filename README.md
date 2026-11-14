@@ -26,6 +26,9 @@ ai-worker scan
 # Inspect a public GitHub issue linked from a bounty listing
 ai-worker inspect --url https://github.com/OWNER/REPO/issues/123
 
+# Clone the issue's public repository into a disposable workspace
+ai-worker prepare --url https://github.com/OWNER/REPO/issues/123 --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes
+
 # Draft a structured plan with a local Ollama model (no API key)
 ollama pull qwen2.5-coder:7b
 ollama serve
