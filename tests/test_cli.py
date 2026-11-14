@@ -166,7 +166,7 @@ def test_cli_pipeline_refreshes_and_resolves_jobbi_gig(monkeypatch, capsys, tmp_
         reward_amount=25,
         currency="USD",
     )
-    fake_db = object()
+    fake_db = SimpleNamespace(close=lambda: None)
     monkeypatch.setattr(cli, "fetch_gigs", lambda limit: ["fresh-gig"])
     monkeypatch.setattr(cli, "connect", lambda path: fake_db)
     monkeypatch.setattr(cli, "upsert_gigs", lambda db, gigs: captured.update(db=db, gigs=gigs))
