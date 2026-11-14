@@ -12,7 +12,7 @@ from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
-from ai_worker.storage import connect, outcome_summary, record_outcome, source_performance, upsert_gigs
+from ai_worker.storage import active_task_count, connect, outcome_summary, record_outcome, source_performance, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
@@ -83,6 +83,7 @@ def main() -> int:
     scan.add_argument("--db", default="data/ai_worker.sqlite3")
     scan.add_argument("--output", default="reports/latest.md")
     scan.add_argument("--max-opportunities", type=int, default=5)
+    scan.add_argument("--max-active", type=int, default=5)
 
     sandbox = sub.add_parser("sandbox")
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
@@ -251,11 +252,15 @@ def main() -> int:
                 else:
                     rejected += 1
             ranked.sort(key=lambda row: row[1], reverse=True)
-            portfolio = select_portfolio(ranked, limit=args.max_opportunities)
+            active = active_task_count(db)
+            portfolio = select_portfolio(
+                ranked, limit=args.max_opportunities,
+                active_count=active, max_active=args.max_active,
+            )
             report = write_report(portfolio, args.output, source_history=history)
         finally:
             db.close()
-        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Selected: {len(portfolio)} | Filtered: {rejected}")
+        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Active: {active}/{args.max_active} | Selected: {len(portfolio)} | Filtered: {rejected}")
         print(f"Report: {report}")
         return 0
 
