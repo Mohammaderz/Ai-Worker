@@ -21,6 +21,12 @@ RISK_TERMS = {
     "passport", "government id", "identity document", "medical records",
     "health records", "credit card", "bank account", "access key", "iam key",
     "api key", "secret key", "gdpr", "security remediation",
+    "connect wallet", "wallet connection", "seed phrase", "mnemonic",
+    "claim bond", "post bond", "refundable bond", "upfront fee",
+    "registration fee", "gas fee", "pay gas", "airdrop", "referral link",
+    "ransomware", "keylogger", "zero-day", "zero day", "remote code execution",
+    "privilege escalation", "reverse shell", "exploit chain", "penetration test",
+    "pentest", "vulnerability disclosure", "exploit development",
 }
 
 
