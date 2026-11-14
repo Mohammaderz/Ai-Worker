@@ -57,7 +57,7 @@ ai-worker scan --limit 1000 --source algora --source issuehunt
 printf 'Paste your Bounty Agent API key (input hidden), then press Enter: '
 read -s BOUNTY_AGENT_API_KEY
 export BOUNTY_AGENT_API_KEY
-printf '\\n'
+printf '\n'
 ai-worker bounty scan --limit 100 --output reports/bounty-open.json
 unset BOUNTY_AGENT_API_KEY
 ~~~
