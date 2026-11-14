@@ -23,6 +23,19 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
         db.execute("ALTER TABLE gigs ADD COLUMN payment_rail TEXT")
     if "acceptance_type" not in columns:
         db.execute("ALTER TABLE gigs ADD COLUMN acceptance_type TEXT")
+    db.execute("""CREATE TABLE IF NOT EXISTS task_outcomes (
+        gig_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        actual_hours REAL,
+        gross_received REAL,
+        fees REAL DEFAULT 0,
+        submitted_at TEXT,
+        accepted_at TEXT,
+        paid_at TEXT,
+        notes TEXT DEFAULT '',
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(gig_id) REFERENCES gigs(id)
+    )""")
     db.commit()
     return db
 
@@ -43,3 +56,115 @@ def upsert_gigs(db: sqlite3.Connection, gigs: list[Gig]) -> None:
             json.dumps(gig.raw, ensure_ascii=False),
         ))
     db.commit()
+
+
+
+OUTCOME_TRANSITIONS = {
+    "claimed": {"in_progress", "rejected"},
+    "in_progress": {"submitted", "rejected"},
+    "submitted": {"accepted", "rejected"},
+    "accepted": {"paid"},
+    "paid": set(),
+    "rejected": set(),
+}
+
+
+def record_outcome(
+    db: sqlite3.Connection,
+    gig_id: str,
+    status: str,
+    *,
+    actual_hours: float | None = None,
+    gross_received: float | None = None,
+    fees: float = 0.0,
+    notes: str = "",
+) -> None:
+    import math
+
+    if status not in OUTCOME_TRANSITIONS:
+        raise ValueError("Unknown outcome status")
+    for label, value, allow_zero in (
+        ("actual_hours", actual_hours, False),
+        ("gross_received", gross_received, True),
+        ("fees", fees, True),
+    ):
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or (value < 0 if allow_zero else value <= 0)
+        ):
+            raise ValueError(f"{label} must be a finite {'non-negative' if allow_zero else 'positive'} number")
+    if status == "paid" and gross_received is None:
+        existing = db.execute(
+            "SELECT gross_received FROM task_outcomes WHERE gig_id=?", (gig_id,)
+        ).fetchone()
+        if not existing or existing[0] is None:
+            raise ValueError("A paid outcome requires the actual gross amount received")
+    if not isinstance(notes, str) or len(notes) > 4000:
+        raise ValueError("Notes must be text up to 4000 characters")
+    if not db.execute("SELECT 1 FROM gigs WHERE id=?", (gig_id,)).fetchone():
+        raise ValueError("Gig ID does not exist in the local opportunity ledger")
+
+    existing = db.execute(
+        "SELECT status FROM task_outcomes WHERE gig_id=?", (gig_id,)
+    ).fetchone()
+    if existing and status != existing[0] and status not in OUTCOME_TRANSITIONS[existing[0]]:
+        raise ValueError(f"Invalid outcome transition: {existing[0]} -> {status}")
+
+    db.execute(
+        """INSERT INTO task_outcomes(
+            gig_id,status,actual_hours,gross_received,fees,submitted_at,accepted_at,paid_at,notes
+        ) VALUES(
+            ?,?,?,?,?, 
+            CASE WHEN ? IN ('submitted','accepted','paid') THEN CURRENT_TIMESTAMP END,
+            CASE WHEN ? IN ('accepted','paid') THEN CURRENT_TIMESTAMP END,
+            CASE WHEN ?='paid' THEN CURRENT_TIMESTAMP END,
+            ?
+        )
+        ON CONFLICT(gig_id) DO UPDATE SET
+            status=excluded.status,
+            actual_hours=COALESCE(excluded.actual_hours,task_outcomes.actual_hours),
+            gross_received=COALESCE(excluded.gross_received,task_outcomes.gross_received),
+            fees=excluded.fees,
+            submitted_at=COALESCE(task_outcomes.submitted_at,excluded.submitted_at),
+            accepted_at=COALESCE(task_outcomes.accepted_at,excluded.accepted_at),
+            paid_at=COALESCE(task_outcomes.paid_at,excluded.paid_at),
+            notes=excluded.notes,
+            updated_at=CURRENT_TIMESTAMP""",
+        (
+            gig_id, status, actual_hours, gross_received, fees,
+            status, status, status, notes,
+        ),
+    )
+    db.commit()
+
+
+def outcome_summary(db: sqlite3.Connection) -> dict:
+    rows = db.execute(
+        """SELECT status,actual_hours,gross_received,fees
+           FROM task_outcomes"""
+    ).fetchall()
+    counts = {status: 0 for status in OUTCOME_TRANSITIONS}
+    for status, _hours, _gross, _fees in rows:
+        counts[status] = counts.get(status, 0) + 1
+    paid = [row for row in rows if row[0] == "paid"]
+    gross = sum(float(row[2] or 0) for row in paid)
+    fees = sum(float(row[3] or 0) for row in paid)
+    hours = sum(float(row[1] or 0) for row in rows)
+    submitted = counts["submitted"] + counts["accepted"] + counts["paid"] + counts["rejected"]
+    accepted = counts["accepted"] + counts["paid"]
+    return {
+        "tasks": len(rows),
+        "by_status": counts,
+        "submitted_or_later": submitted,
+        "accepted_or_paid": accepted,
+        "acceptance_rate": round(accepted / submitted, 3) if submitted else None,
+        "paid_tasks": len(paid),
+        "gross_received": round(gross, 2),
+        "fees": round(fees, 2),
+        "net_received": round(gross - fees, 2),
+        "tracked_hours": round(hours, 2),
+        "net_received_per_tracked_hour": round((gross - fees) / hours, 2) if hours else None,
+        "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded.",
+    }
