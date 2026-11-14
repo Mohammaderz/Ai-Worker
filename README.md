@@ -44,6 +44,18 @@ ollama serve
 
 Keep Ollama running in that terminal. Run the following workflow commands in a second terminal. The model download uses disk space and the model's speed depends on your Mac's memory and hardware.
 
+## Multi-marketplace discovery
+
+Jobbi's public read-only feed indexes multiple agent-task boards. AI-Worker fetches that normalized feed once, preserves the original board/source on each gig, and can report observed board coverage or filter scans by source:
+
+~~~bash
+ai-worker sources --limit 1000
+ai-worker scan --limit 1000
+ai-worker scan --limit 1000 --source algora --source issuehunt
+~~~
+
+The source registry distinguishes boards actually observed in Jobbi's feed from manual-only marketplaces. Upwork is API-approval-only; Contra, Gitcoin, Freelancer, Fiverr, Codementor, HackerOne and Immunefi are not falsely presented as automated integrations. These are tracked as manual/review-only until a permitted official data interface is verified. Jobbi is an index, not the payer; always verify the original board's payout terms. The scanner does not claim, bid, message or submit work.
+
 ## Read-only repository intelligence
 
 Before committing to a task, profile its repository to identify languages, manifests, lockfiles, test files and likely QA commands:
