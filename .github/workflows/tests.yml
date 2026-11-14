@@ -14,3 +14,24 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install -e ".[dev]"
       - run: pytest -q
+      - name: Build isolated task image
+        run: docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+      - name: Smoke-test isolated execution
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from ai_worker.sandbox import run_in_sandbox
+
+          root = Path(".ci-sandboxes").resolve()
+          workspace = root / "smoke"
+          workspace.mkdir(parents=True, exist_ok=True)
+          result = run_in_sandbox(
+              workspace,
+              ["python", "-c", "print('sandbox-ok')"],
+              scratch_root=root,
+              timeout_seconds=30,
+          )
+          print(result.stdout)
+          if result.exit_code != 0 or result.stdout.strip() != "sandbox-ok":
+              raise SystemExit(result.stderr or f"sandbox exit code: {result.exit_code}")
+          PY
