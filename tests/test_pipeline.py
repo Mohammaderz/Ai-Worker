@@ -139,10 +139,14 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
         brief().url,
         scratch_root=tmp_path / "scratch",
         output_root=tmp_path / "proposals",
+        reward_amount=25,
+        currency="USD",
     )
     assert result.status == "ready_for_human_review"
     assert result.compile_exit_code == 0
     assert result.tests_exit_code == 0
+    assert result.estimated_gross_per_hour == 12.5
+    assert result.currency == "USD"
     assert calls == [
         ["python", "-m", "compileall", "-q", "."],
         ["python", "-m", "pytest", "-q"],
