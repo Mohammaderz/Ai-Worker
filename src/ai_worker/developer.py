@@ -1,6 +1,7 @@
 """Validate and apply model-proposed unified diffs only inside disposable sandboxes."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -11,7 +12,6 @@ MAX_PATCH_BYTES = 100_000
 MAX_PATCH_FILES = 25
 BLOCKED_NAMES = {
     ".env", ".npmrc", ".netrc", ".pypirc", "id_rsa", "id_ed25519",
-    "credentials", "credentials.json", "secrets", "secrets.json",
 }
 
 
@@ -31,6 +31,7 @@ class PatchApplyResult:
 def _safe_patch_path(value: str) -> str:
     parts = value.split("/")
     path = PurePosixPath(value)
+    basename = path.name.lower()
     if (
         not value
         or value.startswith("/")
@@ -38,14 +39,16 @@ def _safe_patch_path(value: str) -> str:
         or not parts
         or any(part in {"", ".", ".."} for part in parts)
         or not path.parts
-        or path.parts[0] == ".git"
+        or ".git" in path.parts
     ):
         raise PatchError(f"Unsafe path in patch: {value!r}")
-    basename = path.name.lower()
-    if basename in BLOCKED_NAMES or basename.endswith((".pem", ".key", ".p12", ".pfx")):
-        raise PatchError(f"Patch may not modify a credential-like path: {value!r}")
-    if basename.startswith(".env"):
-        raise PatchError("Patch may not create or modify environment files")
+    if (
+        basename in BLOCKED_NAMES
+        or basename.startswith(("credentials", "secrets"))
+        or basename.endswith((".pem", ".key", ".p12", ".pfx"))
+        or basename.startswith(".env")
+    ):
+        raise PatchError(f"Patch may not modify a credential or environment path: {value!r}")
     return str(path)
 
 
@@ -57,6 +60,7 @@ def validate_patch_text(diff: str) -> list[str]:
 
     paths: list[str] = []
     current_path: str | None = None
+    in_hunk = False
     for line in diff.splitlines():
         if line.startswith("diff --git "):
             parts = line[len("diff --git "):].split(" ")
@@ -67,8 +71,11 @@ def validate_patch_text(diff: str) -> list[str]:
             if old_path != new_path:
                 raise PatchError("Renames and copies are not supported in the first patch runner")
             current_path = new_path
+            in_hunk = False
             paths.append(new_path)
-        elif line.startswith("--- ") or line.startswith("+++ "):
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk and (line.startswith("--- ") or line.startswith("+++ ")):
             if current_path is None:
                 raise PatchError("Patch file headers appeared before a Git diff header")
             value = line[4:].split("\t", 1)[0]
@@ -79,10 +86,12 @@ def validate_patch_text(diff: str) -> list[str]:
                 raise PatchError("Patch contains an absolute or unsupported file header")
             if _safe_patch_path(value[2:]) != current_path:
                 raise PatchError("Patch file header does not match its Git diff header")
-        elif "120000" in line and ("mode" in line or line.startswith("index ")):
+        elif line in {"new file mode 120000", "old mode 120000", "new mode 120000"}:
             raise PatchError("Symlink changes are not allowed")
-        elif "160000" in line and "mode" in line:
+        elif line in {"new file mode 160000", "old mode 160000", "new mode 160000"}:
             raise PatchError("Submodule changes are not allowed")
+        elif re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 120000", line):
+            raise PatchError("Symlink changes are not allowed")
 
     if not paths:
         raise PatchError("No Git file changes were found in the patch")
