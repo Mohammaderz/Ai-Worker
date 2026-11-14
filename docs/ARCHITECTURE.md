@@ -13,6 +13,9 @@ The current qualification threshold is deliberately strict: USD/USDC, at least t
 ## Read-only task research
 The inspect command supports canonical public GitHub issue URLs only. It fetches issue title, state, body, labels and update time through the public GitHub API. It does not follow links in issue text, execute issue instructions, or post comments. Other boards and URL formats remain manual-review-only until dedicated adapters are added.
 
+## Local AI planning
+The plan command first reads a canonical public GitHub issue, then sends only its title, body and labels to a local Ollama endpoint bound to loopback. The planner requests a JSON-schema-constrained plan, validates every field and blocks HTTP redirects. It does not use a paid API, access a remote model endpoint, execute generated steps, or write code. Model output is untrusted advice and must be reviewed before any work begins. The default model is qwen2.5-coder:7b; model size and speed depend on the Mac's available memory and hardware.
+
 ## Isolated execution baseline
 The repository includes a Docker runner that executes an argv command inside a disposable task workspace. It disables networking, drops Linux capabilities, uses a non-root UID, makes the container root filesystem read-only, applies PID/CPU/memory/time limits, and mounts only the task workspace writable. It does not forward host environment variables or credentials. See sandbox/README.md.
 
