@@ -30,6 +30,7 @@ def test_sandbox_uses_networkless_hardened_docker(monkeypatch, tmp_path):
     assert "--read-only" in seen["argv"]
     assert "--cap-drop=ALL" in seen["argv"]
     assert "--memory=1g" in seen["argv"]
+    assert any(arg.startswith("--user=") for arg in seen["argv"])
     assert seen["argv"][-3:] == ["python", "-m", "pytest"]
     assert seen["kwargs"]["timeout"] == 600
 
