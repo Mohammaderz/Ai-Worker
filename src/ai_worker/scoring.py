@@ -14,6 +14,18 @@ FIT_TERMS = {
     "api", "backend", "automation", "github", "documentation", "sdk",
     "database", "integration", "refactor", "frontend", "cli",
 }
+# Relative ranking bonuses, not guarantees of payment. Values are based on
+# public payout evidence snapshots and are deliberately small compared with
+# hard eligibility gates. Unknown boards receive no bonus or penalty.
+BOARD_PRIORITY_POINTS = {
+    "agent bounties": 12,
+    "agent-bounties": 12,
+    "olas mech marketplace": 8,
+    "olas": 8,
+    "algora": 6,
+    "basedagents": 3,
+    "based agents": 3,
+}
 RISK_TERMS = {
     "trading", "investment", "invest", "deposit", "wallet seed", "private key",
     "guaranteed profit", "pay to unlock", "buy token", "pump", "casino",
@@ -31,7 +43,7 @@ RISK_TERMS = {
 
 
 def _contains_term(text: str, term: str) -> bool:
-    pattern = r"(?<!\w)" + re.escape(term).replace(r"\ ", r"\s+") + r"(?!\w)"
+    pattern = r"(?<!\\w)" + re.escape(term).replace(r"\\ ", r"\\s+") + r"(?!\\w)"
     return re.search(pattern, text) is not None
 
 
@@ -93,7 +105,7 @@ def evaluate(gig: Gig, min_reward: float = 5.0) -> tuple[bool, float, list[str]]
         len(title_words) < 2
         or len(summary) < 25
         or summary.lower() == gig.title.strip().lower()
-        or re.fullmatch(r"/bounty(?:\s+\$?\d+(?:\.\d{1,2})?)?", summary, re.IGNORECASE)
+        or re.fullmatch(r"/bounty(?:\\s+\\$?\\d+(?:\\.\\d{1,2})?)?", summary, re.IGNORECASE)
     ):
         return False, 0, ["Task title or description is too thin to assess; likely test/spam listing"]
 
@@ -104,12 +116,21 @@ def evaluate(gig: Gig, min_reward: float = 5.0) -> tuple[bool, float, list[str]]
     if not fits:
         return False, 0, ["No clear software-task fit"]
 
-    score = 20 + GRADE_POINTS[gig.payout_grade] + min(gig.reward_amount, 100) / 5 + min(len(fits), 5) * 4
+    board_key = gig.source.strip().lower()
+    board_bonus = BOARD_PRIORITY_POINTS.get(board_key, 0)
+    score = (
+        20
+        + GRADE_POINTS[gig.payout_grade]
+        + min(gig.reward_amount, 100) / 5
+        + min(len(fits), 5) * 4
+        + board_bonus
+    )
     reasons = [
         f"Software fit: {', '.join(fits[:5])}",
         f"Reward: {gig.reward_amount:g} {gig.currency}",
         f"Payment state: {gig.payment_state}",
         f"Payout evidence: {gig.payout_grade}",
+        f"Board priority bonus: +{board_bonus} ({gig.source or 'unknown board'})",
     ]
     if gig.reward_amount > 500:
         reasons.append("High-value reward (>500 USD) requires manual scope and escrow verification")
