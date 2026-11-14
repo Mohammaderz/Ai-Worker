@@ -16,6 +16,9 @@ The inspect command supports canonical public GitHub issue URLs only. It fetches
 ## Workspace preparation
 The prepare command derives the repository from a validated public GitHub issue URL and performs a shallow HTTPS clone. It disables Git hooks, submodule recursion, LFS smudging, interactive prompts and host-level Git configuration/credentials. Workspaces must be new children of the configured scratch root. Private repositories are not supported by this path.
 
+## Multi-marketplace source discovery
+The Jobbi public read-only feed is the current active aggregator adapter. It can expose multiple original boards in one request; `source_report` reports only sources observed in the actual response and separately lists manual-only marketplaces. The CLI supports `ai-worker sources` and repeatable `scan --source` filters. A marketplace listed as manual-only is not a working scraper/API integration. Upwork requires approved API access; Contra automation is restricted; security platforms require scope-specific human review. Original board terms and payout conditions must be verified because Jobbi is an index, not the payer.
+
 ## Repository intelligence and QA discovery
 The `profile` command performs a bounded, symlink-safe inventory of source languages, common manifests, lockfiles and test-like files. It reads only a small bounded `package.json` to report available scripts. It never executes repository code, package scripts, build hooks or dependency installation. Recommended commands from third-party manifests are explicitly marked for manual review. This gives the operator a repository-specific QA map without treating project configuration as trusted executable instructions.
 
