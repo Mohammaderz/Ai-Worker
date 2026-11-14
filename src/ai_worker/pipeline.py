@@ -31,6 +31,8 @@ class PipelineResult:
     compile_exit_code: int | None
     tests_exit_code: int | None
     tests_detected: bool
+    compile_log: str
+    tests_log: str
     message: str
 
     def to_dict(self) -> dict:
@@ -53,6 +55,10 @@ def resolve_eligible_gig(gig_id: str, gigs: list, min_reward: float = 5.0):
 
 def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _has_python_files(workspace: Path) -> bool:
+    return any(path.is_file() and not path.is_symlink() for path in workspace.rglob("*.py"))
 
 
 def _has_python_tests(workspace: Path) -> bool:
@@ -119,6 +125,7 @@ def run_pipeline(
             message = "The model did not produce a safe diff. Review the plan and questions; no patch was applied."
             compile_code = tests_code = None
             tests_detected = False
+            compile_log = tests_log = ""
         elif proposal.questions or task_plan.blockers or task_plan.risk_level == "high":
             status = "blocked_for_human_review"
             message = "The plan has unresolved questions, blockers or high risk. The proposed diff was saved but not applied."
@@ -137,18 +144,23 @@ def run_pipeline(
                 message = applied.message
                 compile_code = tests_code = None
                 tests_detected = False
+                compile_log = tests_log = ""
             else:
-                compile_result = run_in_sandbox(
-                    workspace,
-                    ["python", "-m", "compileall", "-q", "."],
-                    scratch_root=scratch,
-                    image=image,
-                    timeout_seconds=min(timeout, 300),
-                )
-                compile_code = compile_result.exit_code
+                compile_code = tests_code = None
+                compile_log = tests_log = ""
                 tests_detected = _has_python_tests(workspace)
-                tests_code = None
-                if compile_code != 0:
+                if _has_python_files(workspace):
+                    compile_result = run_in_sandbox(
+                        workspace,
+                        ["python", "-m", "compileall", "-q", "."],
+                        scratch_root=scratch,
+                        image=image,
+                        timeout_seconds=min(timeout, 300),
+                    )
+                    compile_code = compile_result.exit_code
+                    compile_log = (compile_result.stdout + "\n" + compile_result.stderr).strip()
+                    (output_dir / "compile.log").write_text(compile_log, encoding="utf-8")
+                if compile_code is not None and compile_code != 0:
                     status = "compile_failed"
                     message = "The isolated Python syntax check failed. Review sandbox logs before proceeding."
                 elif tests_detected:
@@ -160,12 +172,17 @@ def run_pipeline(
                         timeout_seconds=min(timeout, 600),
                     )
                     tests_code = test_result.exit_code
+                    tests_log = (test_result.stdout + "\n" + test_result.stderr).strip()
+                    (output_dir / "pytest.log").write_text(tests_log, encoding="utf-8")
                     if tests_code == 0:
                         status = "ready_for_human_review"
                         message = "Patch applied in the disposable sandbox; Python compile and detected pytest suite passed. No submission was made."
                     else:
                         status = "tests_failed"
                         message = "The patch was applied, but the isolated pytest run failed. Review logs and missing dependencies."
+                elif compile_code is None:
+                    status = "no_automated_tests_detected"
+                    message = "No Python source or Python tests were detected; no language-specific test runner is configured. Human review is required."
                 else:
                     status = "static_check_passed_no_tests"
                     message = "Patch applied and Python syntax check passed, but no Python tests were detected. Human review is required."
@@ -182,6 +199,8 @@ def run_pipeline(
             compile_exit_code=compile_code,
             tests_exit_code=tests_code,
             tests_detected=tests_detected,
+            compile_log=compile_log,
+            tests_log=tests_log,
             message=message,
         )
         _write_json(output_dir / "pipeline-result.json", result.to_dict())
@@ -198,6 +217,8 @@ def run_pipeline(
             f"- Python compile exit: {compile_code if compile_code is not None else 'Not run'}",
             f"- Pytest detected: {'yes' if tests_detected else 'no'}",
             f"- Pytest exit: {tests_code if tests_code is not None else 'Not run'}",
+            f"- Compile log: {'compile.log' if compile_code is not None else 'Not generated'}",
+            f"- Pytest log: {'pytest.log' if tests_code is not None else 'Not generated'}",
             "",
             message,
             "",
