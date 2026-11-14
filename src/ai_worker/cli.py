@@ -1,8 +1,10 @@
 import argparse
+import json
 
 from ai_worker.report import write_report
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
+from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
 from ai_worker.storage import connect, upsert_gigs
 
@@ -10,6 +12,9 @@ from ai_worker.storage import connect, upsert_gigs
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ai-worker")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    inspect = sub.add_parser("inspect")
+    inspect.add_argument("--url", required=True)
 
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
@@ -27,6 +32,15 @@ def main() -> int:
     sandbox_run.add_argument("task_command", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
+    if args.command == "inspect":
+        try:
+            brief = inspect_github_issue(args.url)
+        except GitHubIssueError as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps(brief.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+
     if args.command == "scan":
         try:
             gigs = fetch_gigs(args.limit)
@@ -67,9 +81,9 @@ def main() -> int:
             print(f"ERROR: {exc}")
             return 2
         if result.stdout:
-            print(result.stdout, end="" if result.stdout.endswith("\\n") else "\\n")
+            print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
         if result.stderr:
-            print(result.stderr, end="" if result.stderr.endswith("\\n") else "\\n")
+            print(result.stderr, end="" if result.stderr.endswith("\n") else "\n")
         print(f"Sandbox exit code: {result.exit_code}")
         return result.exit_code
 
