@@ -126,3 +126,33 @@ def test_bounty_cli_writes_read_only_report_without_printing_secret(tmp_path, mo
     assert secret not in output.read_text(encoding="utf-8")
     assert '"fixed_payout": 25.0' in output.read_text(encoding="utf-8")
     assert "No bids, claims, messages, or submissions" in captured.out
+
+
+def test_bounty_adapter_surfaces_rate_limit_retry_after():
+    from email.message import Message
+    from urllib.error import HTTPError
+
+    def fake_urlopen(request, timeout):
+        headers = Message()
+        headers["Retry-After"] = "45"
+        raise HTTPError(request.full_url, 429, "Too Many Requests", headers, None)
+
+    with pytest.raises(BountyAPIError, match="retry after 45 seconds"):
+        fetch_open_bounties("test-secret", opener=fake_urlopen)
+
+
+def test_bounty_adapter_rejects_repeated_pagination_cursor():
+    calls = 0
+
+    def fake_urlopen(request, timeout):
+        nonlocal calls
+        calls += 1
+        return FakeResponse({
+            "bounties": [],
+            "has_more": True,
+            "next_cursor": "same-cursor",
+        })
+
+    with pytest.raises(BountyAPIError, match="missing or repeated"):
+        fetch_open_bounties("test-secret", opener=fake_urlopen)
+    assert calls == 2
