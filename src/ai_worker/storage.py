@@ -166,7 +166,8 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
                 payout_latencies.append(max(0.0, (paid_at - submitted_at).total_seconds() / 86400))
             except ValueError:
                 continue
-    submitted = counts["submitted"] + counts["accepted"] + counts["paid"] + counts["rejected"]
+    # A rejection before submission is not part of the acceptance-rate denominator.
+    submitted = sum(1 for row in rows if row[4] is not None)
     accepted = counts["accepted"] + counts["paid"]
     return {
         "tasks": len(rows),
