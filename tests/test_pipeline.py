@@ -131,7 +131,7 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
 
     def fake_run(workspace, command, **kwargs):
         calls.append(command)
-        return SimpleNamespace(exit_code=0)
+        return SimpleNamespace(exit_code=0, stdout="checks passed", stderr="")
 
     monkeypatch.setattr(pipeline, "run_in_sandbox", fake_run)
 
