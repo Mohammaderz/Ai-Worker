@@ -25,6 +25,9 @@ ai-worker scan
 ## Build the sandbox image
 \`\`\`bash
 docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+
+# Run a command in a disposable, network-isolated workspace
+ai-worker sandbox run --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes -- python -m compileall .
 \`\`\`
 
 Daily $5-$10 is a target, not a guarantee. The coding agent and task orchestration are still being built. See docs/ARCHITECTURE.md and sandbox/README.md.
