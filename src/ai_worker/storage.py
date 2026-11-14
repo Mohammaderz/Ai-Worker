@@ -34,7 +34,8 @@ def upsert_gigs(db: sqlite3.Connection, gigs: list[Gig]) -> None:
         ) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET
         title=excluded.title,url=excluded.url,source=excluded.source,currency=excluded.currency,
         reward_amount=excluded.reward_amount,payout_grade=excluded.payout_grade,
-        payment_state=excluded.payment_state,payment_rail=excluded.payment_rail,\n        acceptance_type=excluded.acceptance_type,
+        payment_state=excluded.payment_state,payment_rail=excluded.payment_rail,
+        acceptance_type=excluded.acceptance_type,
         last_seen=CURRENT_TIMESTAMP,raw_json=excluded.raw_json""",
         (
             gig.id, gig.title, gig.url, gig.source, gig.currency, gig.reward_amount,
