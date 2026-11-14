@@ -10,7 +10,7 @@ Safety-first agent-work pipeline. v0.2 discovers paid software tasks, applies st
 - Requires an explicitly escrowed reward and B-grade-or-better public payout evidence.
 - Rejects closed/expired tasks, unsafe links, malformed expiry data, missing acceptance criteria, and risky categories.
 - Ranks candidates and writes a Markdown shortlist.
-- Includes a disposable Docker runner baseline with no network, no capabilities, a read-only root filesystem, resource limits and no host secrets.
+- Includes a disposable Docker runner and a patch applier that checks diffs before applying them inside the isolated workspace; no network, no capabilities, a read-only root filesystem, resource limits and no host secrets.
 - Does not claim gigs, bid, message clients, publish PRs, sign transactions, or spend money.
 
 Jobbi is an index, not the payer. Verify original-board terms, claim process, acceptance criteria, and payout conditions. A listed or escrowed reward is not the same as money received.
