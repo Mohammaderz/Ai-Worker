@@ -43,7 +43,7 @@ After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by I
 ai-worker scan --limit 1000
 
 # Run one current eligible Jobbi gig (use its exact ID from the report/feed)
-ai-worker pipeline --gig-id algora:OWNER/REPO#123
+ai-worker pipeline --gig-id SOURCE:NATIVE_ID
 
 # Or run a known public GitHub issue directly
 ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
