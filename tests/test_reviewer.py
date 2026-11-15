@@ -314,3 +314,32 @@ def test_ast_security_scanner_detects_multiline_builtins_exec():
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
     assert findings[0]["line"] == 1
+
+
+
+def test_ast_security_scanner_detects_imported_eval_alias():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++from builtins import eval as run_code
++result = run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
+    assert findings[0]["severity"] == "critical"
+
+
+def test_ast_security_scanner_detects_aliased_builtins_module():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++import builtins as core
++result = core.exec(untrusted_source)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
+    assert findings[0]["severity"] == "critical"
