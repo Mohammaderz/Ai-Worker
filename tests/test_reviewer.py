@@ -3,6 +3,7 @@ import json
 import pytest
 
 from ai_worker.reviewer import (
+    _detect_static_security_findings,
     ReviewerError,
     _detect_static_security_findings,
     _validate_finding_locations,
