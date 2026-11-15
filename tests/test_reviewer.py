@@ -542,3 +542,76 @@ def test_ast_security_scanner_detects_alias_after_safe_rebinding_then_eval():
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
     assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_uses_alias_state_at_each_call():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code(user_input)
++run_code = safe_function
++run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_call_before_alias_is_rebound_safe():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code = eval
++run_code(user_input)
++run_code = safe_function
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
+
+
+def test_ast_security_scanner_does_not_use_future_alias_from_full_source():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1 @@
++run_code(user_input)
+"""
+    findings = _detect_static_security_findings(
+        diff, {"sample.py": "run_code(user_input)\nrun_code = eval\n"}
+    )
+    assert findings == []
+
+
+def test_ast_security_scanner_uses_prior_full_source_alias_before_changed_call():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1,2 +1,2 @@
+ from builtins import eval as run_code
+-result = 0
++result = run_code(user_input)
+"""
+    findings = _detect_static_security_findings(
+        diff,
+        {"sample.py": "from builtins import eval as run_code\nresult = run_code(user_input)\n"},
+    )
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
+
+
+def test_ast_security_scanner_respects_safe_rebinding_in_full_source():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1,3 +1,3 @@
+ import builtins as core
+-core.exec(user_input)
++core = safe_module
++core.exec(user_input)
+"""
+    findings = _detect_static_security_findings(
+        diff,
+        {"sample.py": "import builtins as core\ncore = safe_module\ncore.exec(user_input)\n"},
+    )
+    assert findings == []
