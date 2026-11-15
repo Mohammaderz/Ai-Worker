@@ -387,22 +387,82 @@ def _hunk_dynamic_execution_lines(
     detected: set[int] = set()
 
     def inspect_calls(node: ast.AST, calls: set[str], modules: set[str]) -> None:
-        for child in ast.walk(node):
-            if not isinstance(child, ast.Call):
-                continue
-            function = child.func
-            dangerous = (
-                isinstance(function, ast.Name)
-                and function.id in ({"eval", "exec"} | calls)
-            ) or (
-                isinstance(function, ast.Attribute)
-                and function.attr in {"eval", "exec"}
-                and isinstance(function.value, ast.Name)
-                and function.value.id in ({"builtins", "__builtins__"} | modules)
-            )
-            hunk_line = child.lineno - 1
-            if dangerous and hunk_line in added_lines:
-                detected.add(hunk_line)
+        class CallVisitor(ast.NodeVisitor):
+            def visit_FunctionDef(self, child: ast.FunctionDef) -> None:
+                return
+
+            def visit_AsyncFunctionDef(self, child: ast.AsyncFunctionDef) -> None:
+                return
+
+            def visit_ClassDef(self, child: ast.ClassDef) -> None:
+                return
+
+            def visit_Lambda(self, child: ast.Lambda) -> None:
+                return
+
+            def visit_Call(self, child: ast.Call) -> None:
+                function = child.func
+                dangerous = (
+                    isinstance(function, ast.Name)
+                    and function.id in ({"eval", "exec"} | calls)
+                ) or (
+                    isinstance(function, ast.Attribute)
+                    and function.attr in {"eval", "exec"}
+                    and isinstance(function.value, ast.Name)
+                    and function.value.id in ({"builtins", "__builtins__"} | modules)
+                )
+                hunk_line = child.lineno - 1
+                if dangerous and hunk_line in added_lines:
+                    detected.add(hunk_line)
+                self.generic_visit(child)
+
+        CallVisitor().visit(node)
+
+    def local_binding_names(statements: list[ast.stmt]) -> set[str]:
+        class BindingVisitor(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.names: set[str] = set()
+                self.explicit_globals: set[str] = set()
+                self.explicit_nonlocals: set[str] = set()
+
+            def visit_Name(self, node: ast.Name) -> None:
+                if isinstance(node.ctx, (ast.Store, ast.Del)):
+                    self.names.add(node.id)
+
+            def visit_Import(self, node: ast.Import) -> None:
+                for item in node.names:
+                    self.names.add(item.asname or item.name.split(".")[0])
+
+            def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+                for item in node.names:
+                    if item.name != "*":
+                        self.names.add(item.asname or item.name)
+
+            def visit_Global(self, node: ast.Global) -> None:
+                self.explicit_globals.update(node.names)
+
+            def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+                self.explicit_nonlocals.update(node.names)
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                self.names.add(node.name)
+
+            def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+                self.names.add(node.name)
+
+            def visit_ClassDef(self, node: ast.ClassDef) -> None:
+                self.names.add(node.name)
+
+            def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+                if node.name:
+                    self.names.add(node.name)
+                for child in node.body:
+                    self.visit(child)
+
+        visitor = BindingVisitor()
+        for statement in statements:
+            visitor.visit(statement)
+        return visitor.names - visitor.explicit_globals - visitor.explicit_nonlocals
 
     def merge_states(
         *states: tuple[set[str], set[str]],
@@ -425,10 +485,55 @@ def _hunk_dynamic_execution_lines(
                 invalidate_target(element, calls, modules)
 
     def scan_block(
-        statements: list[ast.stmt], calls: set[str], modules: set[str]
+        statements: list[ast.stmt],
+        calls: set[str],
+        modules: set[str],
+        class_globals: tuple[set[str], set[str]] | None = None,
     ) -> tuple[set[str], set[str]]:
         calls, modules = set(calls), set(modules)
         for statement in sorted(statements, key=lambda item: (item.lineno, item.col_offset)):
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for expression in [
+                    *statement.decorator_list,
+                    *statement.args.defaults,
+                    *statement.args.kw_defaults,
+                ]:
+                    if expression is not None:
+                        inspect_calls(expression, calls, modules)
+                if statement.returns is not None:
+                    inspect_calls(statement.returns, calls, modules)
+                local_names = local_binding_names(statement.body)
+                local_names.update(
+                    argument.arg
+                    for argument in (
+                        statement.args.posonlyargs
+                        + statement.args.args
+                        + statement.args.kwonlyargs
+                    )
+                )
+                if statement.args.vararg is not None:
+                    local_names.add(statement.args.vararg.arg)
+                if statement.args.kwarg is not None:
+                    local_names.add(statement.args.kwarg.arg)
+                inherited_calls, inherited_modules = (
+                    class_globals if class_globals is not None else (calls, modules)
+                )
+                function_calls = set(inherited_calls) - local_names
+                function_modules = set(inherited_modules) - local_names
+                scan_block(statement.body, function_calls, function_modules)
+                continue
+
+            if isinstance(statement, ast.ClassDef):
+                for expression in [*statement.decorator_list, *statement.bases]:
+                    inspect_calls(expression, calls, modules)
+                for keyword in statement.keywords:
+                    inspect_calls(keyword.value, calls, modules)
+                scan_block(
+                    statement.body, calls, modules,
+                    class_globals=(set(calls), set(modules)),
+                )
+                continue
+
             if isinstance(statement, ast.If):
                 inspect_calls(statement.test, calls, modules)
                 body_state = scan_block(statement.body, calls, modules)
