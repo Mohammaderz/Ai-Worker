@@ -346,7 +346,7 @@ def run_pipeline(
             },
             "proposal": {
                 "status": proposal.status,
-                "summary": proposal.summary,
+                "summary": getattr(proposal, "summary", ""),
                 "changed_files": proposal.changed_files,
                 "patch_sha256": _sha256_file(proposal_file),
             },
