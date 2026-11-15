@@ -326,3 +326,98 @@ def test_pipeline_fails_closed_when_independent_reviewer_is_unavailable(monkeypa
     assert manifest["agent"]["reviewer_findings"] == []
     review = json.loads((Path(result.output_dir) / "review.json").read_text())
     assert review["verdict"] == "unavailable"
+
+
+
+def test_pipeline_blocks_patch_when_reviewer_finds_critical_issue(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"],
+            estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="generator-model", status="patch", diff="diff --git a/a.py b/a.py",
+            changed_files=["a.py"], questions=[], to_dict=lambda: {"diff": "draft"},
+        ),
+    )
+    finding = SimpleNamespace(
+        severity="critical", file="a.py", line=1, title="Unsafe behavior",
+        evidence="Sensitive data is exposed.", recommendation="Remove the exposure.",
+    )
+    monkeypatch.setattr(
+        pipeline, "review_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            verdict="blocked", summary="Critical security issue.", findings=[finding],
+            to_dict=lambda: {"verdict": "blocked", "summary": "Critical security issue.", "findings": []},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda *args, **kwargs: pytest.fail("critical review finding must block patch application"),
+    )
+
+    result = pipeline.run_pipeline(
+        brief().url,
+        scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals",
+        model="generator-model",
+        reviewer_model="reviewer-model",
+    )
+
+    assert result.status == "review_blocked"
+    assert result.reviewer_verdict == "blocked"
+    assert result.reviewer_findings[0]["severity"] == "critical"
+
+
+def test_pipeline_rejects_same_generator_and_reviewer_model(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"],
+            estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="qwen2.5-coder:7b", status="patch", diff="diff --git a/a.py b/a.py",
+            changed_files=["a.py"], questions=[], to_dict=lambda: {"diff": "draft"},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "review_patch",
+        lambda *args, **kwargs: pytest.fail("identical reviewer model must be rejected before inference"),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda *args, **kwargs: pytest.fail("patch must remain unapplied"),
+    )
+
+    result = pipeline.run_pipeline(
+        brief().url,
+        scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals",
+        reviewer_model="qwen2.5-coder:7b",
+    )
+
+    assert result.status == "reviewer_unavailable_blocked"
+    assert result.reviewer_verdict == "unavailable"
+    assert "must differ" in result.message
