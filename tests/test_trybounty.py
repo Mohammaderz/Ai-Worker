@@ -170,6 +170,6 @@ def test_bounty_adapter_refuses_redirects_for_bearer_token_safety():
 
 def test_bounty_adapter_rejects_actual_carriage_return_and_newline():
     with pytest.raises(BountyAPIError, match="malformed"):
-        fetch_open_bounties("bad\\nheader")
+        fetch_open_bounties("bad\nheader")
     with pytest.raises(BountyAPIError, match="malformed"):
-        fetch_open_bounties("bad\\rheader")
+        fetch_open_bounties("bad\rheader")
