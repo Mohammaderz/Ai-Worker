@@ -39,6 +39,7 @@ docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
 ## Optional local AI model
 ~~~bash
 ollama pull qwen2.5-coder:7b
+ollama pull deepseek-coder:6.7b
 ollama serve
 ~~~
 
