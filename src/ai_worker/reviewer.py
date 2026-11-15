@@ -161,7 +161,7 @@ def _line_has_dynamic_execution(source: str) -> bool:
     if not source.strip() or source.lstrip().startswith("#"):
         return False
     try:
-        tree = ast.parse("async def _review_line():\\n    " + source.strip() + "\\n")
+        tree = ast.parse("async def _review_line():\n    " + source.strip() + "\n")
     except SyntaxError:
         # Added lines can be fragments of a multi-line statement. Do not guess.
         return False
@@ -197,7 +197,7 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
             new_line = None
             continue
         if diff_line.startswith("@@ "):
-            match = re.search(r"\\+(\\d+)(?:,(\\d+))?", diff_line)
+            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
             if not match:
                 raise ReviewerError("Patch contains an invalid unified-diff hunk header")
             new_line = int(match.group(1))
