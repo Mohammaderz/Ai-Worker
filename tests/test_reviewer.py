@@ -3,9 +3,9 @@ import json
 import pytest
 
 from ai_worker.reviewer import (
-    _detect_static_security_findings,
     ReviewerError,
     _detect_static_security_findings,
+    _read_changed_python_sources,
     _validate_finding_locations,
     _validate_review,
     review_patch,
@@ -385,3 +385,67 @@ def test_ast_security_scanner_does_not_flag_unrelated_run_function():
 +result = run_code(user_input)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_resolves_alias_from_unchanged_file_context():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -49,0 +50,1 @@
++result = run_code(user_input)
+"""
+    existing_source = "from builtins import eval as run_code\n"
+    findings = _detect_static_security_findings(
+        diff, {"sample.py": existing_source + "result = run_code(user_input)\n"}
+    )
+    assert len(findings) == 1
+    assert findings[0]["line"] == 50
+    assert findings[0]["severity"] == "critical"
+
+
+def test_ast_security_scanner_resolves_existing_builtins_module_alias():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -49,0 +50,1 @@
++core.exec(untrusted_source)
+"""
+    findings = _detect_static_security_findings(
+        diff, {"sample.py": "import builtins as core\n"}
+    )
+    assert len(findings) == 1
+    assert findings[0]["line"] == 50
+
+
+def test_read_changed_python_sources_reads_only_safe_changed_files(tmp_path):
+    package = tmp_path / "src"
+    package.mkdir()
+    source = package / "sample.py"
+    source.write_text("from builtins import eval as run_code\n", encoding="utf-8")
+    diff = """diff --git a/src/sample.py b/src/sample.py
+--- a/src/sample.py
++++ b/src/sample.py
+@@ -1 +1,2 @@
+ from builtins import eval as run_code
++result = run_code(user_input)
+"""
+    assert _read_changed_python_sources(str(tmp_path), diff) == {
+        "src/sample.py": "from builtins import eval as run_code\n"
+    }
+
+
+def test_read_changed_python_sources_rejects_symlink(tmp_path):
+    outside = tmp_path.parent / "outside-security-source.py"
+    outside.write_text("import builtins as core\n", encoding="utf-8")
+    link = tmp_path / "linked.py"
+    link.symlink_to(outside)
+    diff = """diff --git a/linked.py b/linked.py
+--- a/linked.py
++++ b/linked.py
+@@ -1 +1,2 @@
+ import builtins as core
++core.eval(user_input)
+"""
+    with pytest.raises(ReviewerError, match="symlink"):
+        _read_changed_python_sources(str(tmp_path), diff)
