@@ -391,7 +391,7 @@ def _hunk_dynamic_execution_lines(
         calls: set[str],
         modules: set[str],
         shadowed_names: set[str] | None = None,
-    ) -> None:
+    ) -> set[str]:
         shadowed = shadowed_names or set()
         class CallVisitor(ast.NodeVisitor):
             def __init__(self) -> None:
@@ -420,38 +420,45 @@ def _hunk_dynamic_execution_lines(
                 generators = child.generators  # type: ignore[attr-defined]
                 if not generators:
                     return
-                # The first iterable is evaluated in the enclosing scope.
+                outer_before = set(self.shadowed)
+                # Python evaluates the first iterable in the enclosing scope.
                 self.visit(generators[0].iter)
-                comprehension_shadowed = set(shadowed)
-                comprehension_shadowed.update(
-                    self._target_names(generators[0].target)
-                )
+                comprehension_shadowed = set(self.shadowed)
+                target_names: set[str] = set()
+                first_targets = self._target_names(generators[0].target)
+                target_names.update(first_targets)
+                comprehension_shadowed.update(first_targets)
                 for condition in generators[0].ifs:
-                    inspect_calls(
+                    comprehension_shadowed = inspect_calls(
                         condition, calls, modules, comprehension_shadowed
                     )
                 for generator in generators[1:]:
-                    inspect_calls(
+                    comprehension_shadowed = inspect_calls(
                         generator.iter, calls, modules, comprehension_shadowed
                     )
-                    comprehension_shadowed.update(
-                        self._target_names(generator.target)
-                    )
+                    names = self._target_names(generator.target)
+                    target_names.update(names)
+                    comprehension_shadowed.update(names)
                     for condition in generator.ifs:
-                        inspect_calls(
+                        comprehension_shadowed = inspect_calls(
                             condition, calls, modules, comprehension_shadowed
                         )
                 if isinstance(child, ast.DictComp):
-                    inspect_calls(
+                    comprehension_shadowed = inspect_calls(
                         child.key, calls, modules, comprehension_shadowed
                     )
-                    inspect_calls(
+                    comprehension_shadowed = inspect_calls(
                         child.value, calls, modules, comprehension_shadowed
                     )
                 else:
-                    inspect_calls(
+                    comprehension_shadowed = inspect_calls(
                         child.elt, calls, modules, comprehension_shadowed
                     )
+                # Assignment expressions in comprehensions bind in the containing
+                # scope; iteration targets remain private to the comprehension.
+                self.shadowed.update(
+                    comprehension_shadowed - outer_before - target_names
+                )
 
             def visit_ListComp(self, child: ast.ListComp) -> None:
                 self._visit_comprehension(child)
@@ -508,7 +515,9 @@ def _hunk_dynamic_execution_lines(
                     detected.add(hunk_line)
                 self.generic_visit(child)
 
-        CallVisitor().visit(node)
+        visitor = CallVisitor()
+        visitor.visit(node)
+        return visitor.shadowed
 
     def local_binding_names(
         statements: list[ast.stmt],
