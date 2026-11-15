@@ -343,3 +343,45 @@ def test_ast_security_scanner_detects_aliased_builtins_module():
     assert len(findings) == 1
     assert findings[0]["line"] == 2
     assert findings[0]["severity"] == "critical"
+
+
+
+def test_ast_security_scanner_resolves_eval_alias_across_hunks():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1 @@
++from builtins import eval as run_code
+@@ -99,0 +100,1 @@
++result = run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 100
+    assert findings[0]["severity"] == "critical"
+
+
+def test_ast_security_scanner_resolves_module_alias_across_hunks():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1 @@
++import builtins as core
+@@ -99,0 +100,1 @@
++core.exec(untrusted_source)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 100
+
+
+def test_ast_security_scanner_does_not_flag_unrelated_run_function():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++def run_code(value):
++    return value
++result = run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
