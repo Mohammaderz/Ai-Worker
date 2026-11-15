@@ -150,6 +150,49 @@ def test_reviewer_rejects_malformed_unhashable_severity():
 
 
 
+
+def test_static_security_finding_overrides_model_pass(monkeypatch, tmp_path):
+    (tmp_path / "sample.py").write_text(
+        "def calculate(expression):\\n    return 0\\n", encoding="utf-8"
+    )
+
+    class FakeOpener:
+        def open(self, request, timeout):
+            return FakeResponse({"message": {"content": json.dumps(valid_review())}})
+
+    monkeypatch.setattr("ai_worker.reviewer.build_opener", lambda handler: FakeOpener())
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1,2 +1,2 @@
+ def calculate(expression):
+-    return 0
++    return eval(expression)
+"""
+    result = review_patch(brief(), str(tmp_path), diff, model="review-model")
+
+    assert result.verdict == "blocked"
+    assert len(result.findings) == 1
+    assert result.findings[0].severity == "critical"
+    assert result.findings[0].file == "sample.py"
+    assert result.findings[0].line == 2
+    assert "eval()/exec()" in result.findings[0].evidence
+
+
+def test_static_security_scanner_ignores_removed_eval_lines():
+    from ai_worker.reviewer import _detect_static_security_findings
+
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1 +1 @@
+-return eval(expression)
++return 0
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+
 def test_reviewer_finding_location_must_be_inside_new_side_hunk():
     diff = """diff --git a/sample.py b/sample.py
 --- a/sample.py
