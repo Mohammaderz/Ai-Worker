@@ -220,7 +220,7 @@ def _read_changed_python_sources(workspace: str, diff: str) -> dict[str, str]:
             target = target[2:]
         relative = PurePosixPath(target)
         if (not target.endswith(".py") or relative.is_absolute() or not relative.parts
-            or any(part in {"", ".", ".."} for part in relative.parts) or "\\\\" in target):
+            or any(part in {"", ".", ".."} for part in relative.parts) or "\\" in target):
             continue
         paths.add(relative.as_posix())
     result: dict[str, str] = {}
@@ -248,6 +248,7 @@ def _read_changed_python_sources(workspace: str, diff: str) -> dict[str, str]:
         total_bytes += len(source.encode("utf-8"))
         result[relative] = source
     return result
+
 
 def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
     """Parse a reconstructed diff hunk as a function body."""
