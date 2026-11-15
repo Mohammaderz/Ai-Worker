@@ -900,8 +900,9 @@ def test_ast_security_scanner_detects_eval_in_function_annotation():
     diff = """diff --git a/sample.py b/sample.py
 --- a/sample.py
 +++ b/sample.py
-@@ -0,0 +1,1 @@
+@@ -0,0 +1,2 @@
 +def calculate(value: eval(user_input)):
++    pass
 """
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
