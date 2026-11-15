@@ -106,3 +106,12 @@ def test_draft_patch_rejects_sensitive_file_targets(monkeypatch, tmp_path):
     import pytest
     with pytest.raises(PatchError):
         draft_patch(ISSUE, tmp_path)
+
+
+def test_context_prioritizes_paths_related_to_issue(tmp_path):
+    (tmp_path / "aaa.py").write_text("unrelated = True", encoding="utf-8")
+    (tmp_path / "retry.py").write_text("retry = True", encoding="utf-8")
+
+    context = collect_repo_context(tmp_path, brief=ISSUE)
+
+    assert context[0]["path"] == "retry.py"

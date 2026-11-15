@@ -27,7 +27,7 @@ EXCLUDED_DIRS = {
 ALLOWED_SUFFIXES = {
     ".py", ".toml", ".md", ".yml", ".yaml", ".json", ".js", ".ts",
     ".tsx", ".jsx", ".go", ".rs", ".java", ".cs", ".php", ".rb",
-    ".sh", ".sql", ".html", ".css", ".txt",
+    ".sh", ".sql", ".html", ".css", ".txt", ".rst",
 }
 PATCH_SCHEMA = {
     "type": "object",
@@ -79,14 +79,31 @@ class PatchApplyResult:
     stderr: str = ""
 
 
-def collect_repo_context(workspace: str | Path) -> list[dict[str, str]]:
+def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = None) -> list[dict[str, str]]:
     """Read a bounded allowlist of text files; never include .git, env or credential files."""
     root = Path(workspace).resolve(strict=True)
     if not root.is_dir():
         raise PatchError("Repository workspace must be a directory")
     result: list[dict[str, str]] = []
     total_bytes = 0
-    for path in sorted(root.rglob("*")):
+    paths = list(root.rglob("*"))
+    if brief is not None:
+        issue_text = " ".join([
+            brief.title, brief.body, brief.repository, *brief.labels
+        ]).lower()
+        issue_terms = set(re.findall(r"[a-z0-9]{3,}", issue_text))
+
+        def relevance(path: Path) -> tuple[int, str]:
+            path_terms = set(re.findall(
+                r"[a-z0-9]{3,}", path.relative_to(root).as_posix().lower()
+            ))
+            return (-len(issue_terms & path_terms), path.as_posix().lower())
+
+        paths.sort(key=relevance)
+    else:
+        paths.sort()
+
+    for path in paths:
         if path.is_symlink() or not path.is_file():
             continue
         relative = path.relative_to(root)
@@ -228,7 +245,7 @@ def draft_patch(
         raise PatchError("Invalid local model name")
     if not isinstance(timeout, int) or not 1 <= timeout <= 900:
         raise PatchError("Patch-generation timeout must be between 1 and 900 seconds")
-    context = collect_repo_context(workspace)
+    context = collect_repo_context(workspace, brief=brief)
     if not context:
         raise PatchError("No eligible text files found in the repository workspace")
 
