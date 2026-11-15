@@ -4,6 +4,7 @@ import pytest
 
 from ai_worker.reviewer import (
     ReviewerError,
+    _detect_static_security_findings,
     _validate_finding_locations,
     _validate_review,
     review_patch,
@@ -246,3 +247,38 @@ def test_reviewer_rejects_finding_for_file_not_in_patch():
     }
     with pytest.raises(ReviewerError, match="outside the patch"):
         _validate_finding_locations(data, diff)
+
+
+
+def test_ast_security_scanner_ignores_comments_and_string_literals():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++# eval(user_input) is mentioned in a comment
++message = "exec(user_input)"
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_builtins_dynamic_execution():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1 @@
++return builtins.eval(expression)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
+    assert findings[0]["severity"] == "critical"
+
+
+def test_ast_security_scanner_ignores_non_python_files():
+    diff = """diff --git a/example.js b/example.js
+--- a/example.js
++++ b/example.js
+@@ -0,0 +1 @@
++eval(expression)
+"""
+    assert _detect_static_security_findings(diff) == []

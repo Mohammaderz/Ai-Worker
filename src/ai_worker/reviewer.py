@@ -1,6 +1,7 @@
 """Independent, fail-closed review of proposed patches using a local Ollama model."""
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -155,20 +156,37 @@ def _validate_finding_locations(data: dict, diff: str) -> None:
 
 
 
+def _line_has_dynamic_execution(source: str) -> bool:
+    """Use Python syntax, not text matching, to identify dangerous calls on a line."""
+    if not source.strip() or source.lstrip().startswith("#"):
+        return False
+    try:
+        tree = ast.parse("async def _review_line():\n    " + source.strip() + "\n")
+    except SyntaxError:
+        # Added lines can be fragments of a multi-line statement. Do not guess.
+        return False
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        if isinstance(function, ast.Name) and function.id in {"eval", "exec"}:
+            return True
+        if (
+            isinstance(function, ast.Attribute)
+            and function.attr in {"eval", "exec"}
+            and isinstance(function.value, ast.Name)
+            and function.value.id in {"builtins", "__builtins__"}
+        ):
+            return True
+    return False
+
+
 def _detect_static_security_findings(diff: str) -> list[dict]:
-    """Detect a small set of high-confidence dangerous Python calls on added lines."""
+    """Detect direct dynamic-execution calls in added Python source lines."""
     findings: list[dict] = []
     current_file: str | None = None
     new_line: int | None = None
-    patterns = (
-        (
-            re.compile(r"(?<![\w.])(?:eval|exec)\s*\("),
-            "critical",
-            "Dynamic code execution",
-            "Added code calls eval()/exec(), which can execute attacker-controlled Python code.",
-            "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
-        ),
-    )
 
     for diff_line in diff.splitlines():
         if diff_line.startswith("+++ "):
@@ -188,21 +206,18 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
             continue
         if diff_line.startswith("+") and not diff_line.startswith("+++"):
             source = diff_line[1:]
-            code = source.split("#", 1)[0]
-            for pattern, severity, title, evidence, recommendation in patterns:
-                if pattern.search(code):
-                    findings.append({
-                        "severity": severity,
-                        "file": current_file,
-                        "line": new_line,
-                        "title": title,
-                        "evidence": evidence,
-                        "recommendation": recommendation,
-                    })
+            if current_file.endswith(".py") and _line_has_dynamic_execution(source):
+                findings.append({
+                    "severity": "critical",
+                    "file": current_file,
+                    "line": new_line,
+                    "title": "Dynamic code execution",
+                    "evidence": "Added Python code calls eval()/exec(), which can execute attacker-controlled code.",
+                    "recommendation": "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
+                })
             new_line += 1
         elif diff_line.startswith(" "):
             new_line += 1
-        # Removed lines do not advance the new-file line number.
 
     return findings
 
