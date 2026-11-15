@@ -105,7 +105,7 @@ def fetch_open_bounties(api_key: str, limit: int = 100, timeout: int = 20, opene
     """Fetch open Bounties through the official authenticated, read-only list endpoint."""
     if not isinstance(api_key, str) or not api_key.strip():
         raise BountyAPIError("Set BOUNTY_AGENT_API_KEY in your local environment; never paste it into chat or commit it.")
-    if len(api_key) > 4096 or "\\r" in api_key or "\\n" in api_key:
+    if len(api_key) > 4096 or "\r" in api_key or "\n" in api_key or "\\r" in api_key or "\\n" in api_key:
         raise BountyAPIError("The BOUNTY_AGENT_API_KEY value is malformed; check the local environment variable.")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
         raise BountyAPIError("Limit must be an integer from 1 to 1000.")
