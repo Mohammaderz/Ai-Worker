@@ -6,6 +6,7 @@ import json
 import os
 import re
 import textwrap
+from pathlib import Path, PurePosixPath
 from dataclasses import asdict, dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener
@@ -183,6 +184,71 @@ def _line_has_dynamic_execution(source: str) -> bool:
     return False
 
 
+def _module_dynamic_execution_aliases(source: str) -> tuple[set[str], set[str]]:
+    """Collect builtins execution aliases from a complete Python module."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set(), {"builtins", "__builtins__"}
+    call_aliases: set[str] = set()
+    module_aliases: set[str] = {"builtins", "__builtins__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "builtins":
+            for item in node.names:
+                if item.name in {"eval", "exec"}:
+                    call_aliases.add(item.asname or item.name)
+        elif isinstance(node, ast.Import):
+            for item in node.names:
+                if item.name == "builtins":
+                    module_aliases.add(item.asname or "builtins")
+    return call_aliases, module_aliases
+
+
+def _read_changed_python_sources(workspace: str, diff: str) -> dict[str, str]:
+    """Read bounded changed Python files without following symlinks outside the workspace."""
+    root = Path(workspace).resolve(strict=True)
+    if not root.is_dir():
+        raise ReviewerError("Reviewer workspace must be a directory")
+    paths: set[str] = set()
+    for line in diff.splitlines():
+        if not line.startswith("+++ "):
+            continue
+        target = line[4:].strip()
+        if target == "/dev/null":
+            continue
+        if target.startswith("b/"):
+            target = target[2:]
+        relative = PurePosixPath(target)
+        if (not target.endswith(".py") or relative.is_absolute() or not relative.parts
+            or any(part in {"", ".", ".."} for part in relative.parts) or "\\\\" in target):
+            continue
+        paths.add(relative.as_posix())
+    result: dict[str, str] = {}
+    total_bytes = 0
+    for relative in sorted(paths):
+        candidate = root.joinpath(*PurePosixPath(relative).parts)
+        current = root
+        for part in PurePosixPath(relative).parts:
+            current = current / part
+            if current.is_symlink():
+                raise ReviewerError(f"Refusing symlink in changed Python path: {relative}")
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root)
+            if not resolved.is_file():
+                raise ReviewerError(f"Changed Python path is not a regular file: {relative}")
+            size = resolved.stat().st_size
+            if size > 200_000 or total_bytes + size > 1_000_000:
+                raise ReviewerError("Changed Python source exceeds the deterministic security scan limit")
+            source = resolved.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            raise ReviewerError(f"Could not safely read changed Python source {relative}: {exc}") from exc
+        if "\x00" in source:
+            raise ReviewerError(f"Changed Python source contains NUL bytes: {relative}")
+        total_bytes += len(source.encode("utf-8"))
+        result[relative] = source
+    return result
+
 def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
     """Parse a reconstructed diff hunk as a function body."""
     if not source_lines:
@@ -262,7 +328,9 @@ def _hunk_dynamic_execution_lines(
     return detected
 
 
-def _detect_static_security_findings(diff: str) -> list[dict]:
+def _detect_static_security_findings(
+    diff: str, source_files: dict[str, str] | None = None
+) -> list[dict]:
     """Detect direct and imported-alias dynamic execution in added Python hunks."""
     findings: list[dict] = []
     current_file: str | None = None
@@ -286,6 +354,11 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
         # checking calls, so the import and call need not share one hunk.
         call_aliases: set[str] = set()
         module_aliases: set[str] = {"builtins", "__builtins__"}
+        full_source = (source_files or {}).get(current_file)
+        if full_source is not None:
+            calls, modules = _module_dynamic_execution_aliases(full_source)
+            call_aliases.update(calls)
+            module_aliases.update(modules)
         for lines, _, _ in file_hunks:
             calls, modules = _hunk_dynamic_execution_aliases(lines)
             call_aliases.update(calls)
@@ -354,9 +427,11 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
     return findings
 
 
-def _merge_static_security_findings(review_data: dict, diff: str) -> dict:
+def _merge_static_security_findings(
+    review_data: dict, diff: str, source_files: dict[str, str] | None = None
+) -> dict:
     """Static critical findings are authoritative and cannot be waived by the LLM."""
-    static_findings = _detect_static_security_findings(diff)
+    static_findings = _detect_static_security_findings(diff, source_files)
     if not static_findings:
         return review_data
 
@@ -409,6 +484,7 @@ def review_patch(
 
     try:
         context = collect_repo_context(workspace, brief)
+        security_sources = _read_changed_python_sources(workspace, diff)
     except (OSError, ValueError, RuntimeError) as exc:
         raise ReviewerError(f"Could not collect safe repository context: {exc}") from exc
 
@@ -460,7 +536,7 @@ def review_patch(
             raise ReviewerError("Ollama returned no structured reviewer content")
         review_data = _validate_review(json.loads(content))
         _validate_finding_locations(review_data, diff)
-        review_data = _merge_static_security_findings(review_data, diff)
+        review_data = _merge_static_security_findings(review_data, diff, security_sources)
     except ReviewerError:
         raise
     except (OllamaError, HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
