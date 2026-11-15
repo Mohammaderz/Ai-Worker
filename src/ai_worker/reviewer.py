@@ -154,6 +154,84 @@ def _validate_finding_locations(data: dict, diff: str) -> None:
             )
 
 
+
+def _detect_static_security_findings(diff: str) -> list[dict]:
+    """Detect a small set of high-confidence dangerous Python calls on added lines."""
+    findings: list[dict] = []
+    current_file: str | None = None
+    new_line: int | None = None
+    patterns = (
+        (
+            re.compile(r"(?<![\w.])(?:eval|exec)\s*\("),
+            "critical",
+            "Dynamic code execution",
+            "Added code calls eval()/exec(), which can execute attacker-controlled Python code.",
+            "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
+        ),
+    )
+
+    for diff_line in diff.splitlines():
+        if diff_line.startswith("+++ "):
+            target = diff_line[4:].strip()
+            current_file = target[2:] if target.startswith("b/") else target
+            if current_file == "/dev/null":
+                current_file = None
+            new_line = None
+            continue
+        if diff_line.startswith("@@ "):
+            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
+            if not match:
+                raise ReviewerError("Patch contains an invalid unified-diff hunk header")
+            new_line = int(match.group(1))
+            continue
+        if current_file is None or new_line is None:
+            continue
+        if diff_line.startswith("+") and not diff_line.startswith("+++"):
+            source = diff_line[1:]
+            code = source.split("#", 1)[0]
+            for pattern, severity, title, evidence, recommendation in patterns:
+                if pattern.search(code):
+                    findings.append({
+                        "severity": severity,
+                        "file": current_file,
+                        "line": new_line,
+                        "title": title,
+                        "evidence": evidence,
+                        "recommendation": recommendation,
+                    })
+            new_line += 1
+        elif diff_line.startswith(" "):
+            new_line += 1
+        # Removed lines do not advance the new-file line number.
+
+    return findings
+
+
+def _merge_static_security_findings(review_data: dict, diff: str) -> dict:
+    """Static critical findings are authoritative and cannot be waived by the LLM."""
+    static_findings = _detect_static_security_findings(diff)
+    if not static_findings:
+        return review_data
+
+    merged = list(review_data["findings"])
+    existing = {(item["file"], item["line"], item["title"]) for item in merged}
+    for finding in static_findings:
+        key = (finding["file"], finding["line"], finding["title"])
+        if key not in existing:
+            merged.append(finding)
+            existing.add(key)
+
+    review_data = dict(review_data)
+    review_data["findings"] = merged
+    review_data["verdict"] = "blocked"
+    review_data["summary"] = (
+        "Deterministic security analysis detected dangerous dynamic code execution "
+        "in added code. The model verdict cannot override this blocking finding. "
+        + review_data["summary"]
+    )[:3000]
+    return review_data
+
+
 def review_patch(
     brief: ResearchBrief,
     workspace: str,
@@ -235,6 +313,7 @@ def review_patch(
             raise ReviewerError("Ollama returned no structured reviewer content")
         review_data = _validate_review(json.loads(content))
         _validate_finding_locations(review_data, diff)
+        review_data = _merge_static_security_findings(review_data, diff)
     except ReviewerError:
         raise
     except (OllamaError, HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
