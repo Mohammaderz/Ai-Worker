@@ -80,10 +80,10 @@ def test_failed_patch_check_never_applies(monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     "patch",
     [
-        "diff --git a/hello.txt b/hello.txt\\n",
-        "diff --git a/hello.txt b/hello.txt\\n--- a/hello.txt\\n+++ b/hello.txt\\n",
-        "diff --git a/hello.txt b/hello.txt\\n--- a/hello.txt\\n+++ b/hello.txt\\n@@ malformed @@\\n-before\\n+after\\n",
-        "diff --git a/hello.txt b/hello.txt\\n+++ b/hello.txt\\n@@ -1 +1 @@\\n-before\\n+after\\n",
+        "diff --git a/hello.txt b/hello.txt\n",
+        "diff --git a/hello.txt b/hello.txt\n--- a/hello.txt\n+++ b/hello.txt\n",
+        "diff --git a/hello.txt b/hello.txt\n--- a/hello.txt\n+++ b/hello.txt\n@@ malformed @@\n-before\n+after\n",
+        "diff --git a/hello.txt b/hello.txt\n+++ b/hello.txt\n@@ -1 +1 @@\n-before\n+after\n",
     ],
 )
 def test_reject_patch_without_complete_unified_diff_structure(patch):
