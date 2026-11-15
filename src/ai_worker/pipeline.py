@@ -168,9 +168,12 @@ def run_pipeline(
         reviewer_summary = "No patch was available for review."
         reviewer_findings: list[dict] = []
         reviewer_error = ""
+        effective_reviewer_model = reviewer_model or os.getenv("AI_WORKER_REVIEWER_MODEL") or DEFAULT_REVIEWER_MODEL
         if proposal.status == "patch":
             try:
-                review = review_patch(brief, str(workspace), proposal.diff, model=reviewer_model, timeout=min(timeout, 900))
+                if effective_reviewer_model == (model or "qwen2.5-coder:7b"):
+                    raise ReviewerError("Reviewer model must differ from the patch generator model")
+                review = review_patch(brief, str(workspace), proposal.diff, model=effective_reviewer_model, timeout=min(timeout, 900))
                 reviewer_verdict = review.verdict
                 reviewer_summary = review.summary
                 reviewer_findings = [{"severity": item.severity, "file": item.file, "line": item.line, "title": item.title, "evidence": item.evidence, "recommendation": item.recommendation} for item in review.findings]
@@ -368,7 +371,7 @@ def run_pipeline(
                 "patch_schema": "patch-schema-v1",
                 "policy_version": "2026-11-15",
                 "reviewer_stage": reviewer_verdict,
-                "reviewer_model": reviewer_model or os.getenv("AI_WORKER_REVIEWER_MODEL") or DEFAULT_REVIEWER_MODEL,
+                "reviewer_model": effective_reviewer_model,
                 "reviewer_findings": reviewer_findings,
             },
             "execution": {
