@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,7 @@ from pathlib import Path
 DEFAULT_IMAGE = "ai-worker-sandbox:py311"
 DEFAULT_NODE_IMAGE = "ai-worker-sandbox:node22"
 MAX_OUTPUT_CHARS = 20_000
+MAX_OUTPUT_BYTES = 1_000_000
 
 
 class SandboxError(RuntimeError):
@@ -93,29 +96,89 @@ def run_in_sandbox(
         image, *command,
     ]
     try:
-        completed = subprocess.run(
-            argv, capture_output=True, text=True, timeout=timeout_seconds, check=False
+        process = subprocess.Popen(
+            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        return SandboxResult(
-            exit_code=completed.returncode,
-            stdout=_text(completed.stdout)[-MAX_OUTPUT_CHARS:],
-            stderr=_text(completed.stderr)[-MAX_OUTPUT_CHARS:],
-        )
-    except subprocess.TimeoutExpired as exc:
-        # A killed Docker client can leave the container running; explicitly stop it.
-        for cleanup_argv in (
-            ["docker", "kill", container_name],
-            ["docker", "rm", "-f", container_name],
-        ):
+        stdout_tail = bytearray()
+        stderr_tail = bytearray()
+        output_bytes = 0
+        output_lock = threading.Lock()
+        output_limit_hit = threading.Event()
+
+        def drain(stream, tail: bytearray) -> None:
+            nonlocal output_bytes
+            if stream is None:
+                return
             try:
-                subprocess.run(cleanup_argv, capture_output=True, timeout=10, check=False)
-            except (OSError, subprocess.TimeoutExpired):
+                while True:
+                    chunk = stream.read(8192)
+                    if not chunk:
+                        break
+                    with output_lock:
+                        output_bytes += len(chunk)
+                        tail.extend(chunk)
+                        if len(tail) > MAX_OUTPUT_CHARS:
+                            del tail[:-MAX_OUTPUT_CHARS]
+                        if output_bytes > MAX_OUTPUT_BYTES:
+                            output_limit_hit.set()
+            except OSError:
+                return
+
+        readers = [
+            threading.Thread(target=drain, args=(process.stdout, stdout_tail), daemon=True),
+            threading.Thread(target=drain, args=(process.stderr, stderr_tail), daemon=True),
+        ]
+        for reader in readers:
+            reader.start()
+
+        deadline = time.monotonic() + timeout_seconds
+        stop_reason = None
+        while process.poll() is None:
+            if output_limit_hit.is_set():
+                stop_reason = "output"
+                break
+            if time.monotonic() >= deadline:
+                stop_reason = "timeout"
+                break
+            time.sleep(0.05)
+
+        if stop_reason is not None:
+            try:
+                process.kill()
+            except OSError:
                 pass
-        return SandboxResult(
-            exit_code=124,
-            stdout=_text(exc.stdout)[-MAX_OUTPUT_CHARS:],
-            stderr=(_text(exc.stderr) + f"\nSandbox timed out after {timeout_seconds}s.")[-MAX_OUTPUT_CHARS:],
-            timed_out=True,
-        )
+
+        try:
+            exit_code = process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            exit_code = process.wait()
+
+        for reader in readers:
+            reader.join(timeout=5)
+
+        if output_limit_hit.is_set() and stop_reason is None:
+            stop_reason = "output"
+
+        stdout = _text(bytes(stdout_tail))
+        stderr = _text(bytes(stderr_tail))
+        if stop_reason is not None:
+            cleanup_errors = []
+            for cleanup_argv in (
+                ["docker", "kill", container_name],
+                ["docker", "rm", "-f", container_name],
+            ):
+                try:
+                    subprocess.run(cleanup_argv, capture_output=True, timeout=10, check=False)
+                except (OSError, subprocess.TimeoutExpired):
+                    cleanup_errors.append("container cleanup command failed")
+            if stop_reason == "timeout":
+                stderr = (stderr + f"\\nSandbox timed out after {timeout_seconds}s.")[-MAX_OUTPUT_CHARS:]
+                return SandboxResult(124, stdout, stderr, timed_out=True)
+            stderr = (stderr + f"\\nSandbox output exceeded {MAX_OUTPUT_BYTES} bytes; execution was stopped.")[-MAX_OUTPUT_CHARS:]
+            return SandboxResult(125, stdout, stderr, timed_out=False)
+
+        return SandboxResult(exit_code=exit_code, stdout=stdout, stderr=stderr)
+
     except FileNotFoundError as exc:
         raise SandboxError("Docker CLI is not installed or is not available in PATH") from exc
