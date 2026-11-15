@@ -115,5 +115,30 @@ def test_reviewer_rejects_high_severity_marked_needs_changes():
 
 
 def test_reviewer_rejects_remote_endpoint():
-    with pytest.raises(Exception):
+    with pytest.raises(ReviewerError, match="Invalid reviewer endpoint"):
         review_patch(brief(), ".", "diff --git a/a b/a", host="https://remote.example")
+
+
+
+def test_reviewer_rejects_malformed_unhashable_verdict():
+    data = valid_review()
+    data["verdict"] = ["pass"]
+    with pytest.raises(ReviewerError, match="verdict is invalid"):
+        _validate_review(data)
+
+
+def test_reviewer_rejects_malformed_unhashable_severity():
+    data = {
+        "verdict": "blocked",
+        "summary": "Malformed severity must never pass validation.",
+        "findings": [{
+            "severity": ["critical"],
+            "file": "client.py",
+            "line": 4,
+            "title": "Unsafe behavior",
+            "evidence": "Sensitive data is exposed.",
+            "recommendation": "Remove the exposure.",
+        }],
+    }
+    with pytest.raises(ReviewerError, match="severity is invalid"):
+        _validate_review(data)
