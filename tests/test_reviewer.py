@@ -1075,3 +1075,32 @@ def test_ast_security_scanner_does_not_leak_comprehension_targets():
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
     assert findings[0]["line"] == 2
+
+
+
+def test_ast_security_scanner_respects_outer_bindings_in_nested_function_headers():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,5 @@
++def outer(eval):
++    @eval(user_input)
++    def inner(value: eval(user_input) = eval(user_input)) -> eval(user_input):
++        return value
++    return inner
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_builtin_eval_in_function_header_expressions():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++@safe_decorator
++def calculate(value: safe_type = eval(user_input)) -> safe_type:
++    return value
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
