@@ -128,12 +128,21 @@ def review_patch(
 ) -> ReviewResult:
     """Review a proposed diff against bounded source context; never modify files."""
     model_name = model or os.getenv("AI_WORKER_REVIEWER_MODEL", DEFAULT_REVIEWER_MODEL)
-    endpoint = _validate_local_host(host or os.getenv("AI_WORKER_OLLAMA_URL", DEFAULT_HOST))
-    if not model_name or len(model_name) > 128 or any(ch.isspace() for ch in model_name):
+    try:
+        endpoint = _validate_local_host(host or os.getenv("AI_WORKER_OLLAMA_URL", DEFAULT_HOST))
+    except OllamaError as exc:
+        raise ReviewerError(f"Invalid reviewer endpoint: {exc}") from exc
+    if not isinstance(model_name, str) or not model_name or len(model_name) > 128 or any(ch.isspace() for ch in model_name):
         raise ReviewerError("Invalid reviewer model name")
     if not isinstance(timeout, int) or not 1 <= timeout <= 900:
         raise ReviewerError("Reviewer timeout must be between 1 and 900 seconds")
-    if not isinstance(diff, str) or not diff or len(diff.encode("utf-8")) > 100_000:
+    if not isinstance(diff, str) or not diff:
+        raise ReviewerError("Patch is empty or exceeds the reviewer input limit")
+    try:
+        diff_size = len(diff.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ReviewerError("Patch is not valid UTF-8 text") from exc
+    if diff_size > 100_000:
         raise ReviewerError("Patch is empty or exceeds the reviewer input limit")
 
     try:
