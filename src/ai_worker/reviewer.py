@@ -323,32 +323,29 @@ def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
     try:
         return ast.parse(wrapped)
     except SyntaxError:
-        # A diff hunk can begin/end inside a compound statement. In particular,
-        # a try block may be present without its except/finally clause because
-        # that clause lies outside the hunk. Retry with a synthetic handler;
-        # this only repairs the analysis wrapper and never changes source lines.
+        # A diff hunk may omit an except/finally clause outside its boundaries.
+        # Add a synthetic handler only to the analysis copy, never source code.
         try_lines = [
             line for line in body.splitlines()
-            if re.match(r"^( *)try\\s*:", line)
+            if re.match(r"^( *)try\s*:", line)
         ]
         for try_line in reversed(try_lines):
             indent = len(try_line) - len(try_line.lstrip(" "))
             prefix = " " * indent
             repaired = (
                 body.rstrip()
-                + "\\n"
-                + prefix + "except Exception:\\n"
-                + prefix + "    pass\\n"
+                + "\n"
+                + prefix + "except Exception:\n"
+                + prefix + "    pass\n"
             )
-            candidate = "async def _review_hunk():\\n" + textwrap.indent(
+            candidate = "async def _review_hunk():\n" + textwrap.indent(
                 repaired, "    "
-            ) + "\\n"
+            ) + "\n"
             try:
                 return ast.parse(candidate)
             except SyntaxError:
                 continue
         return None
-
 
 def _hunk_dynamic_execution_aliases(
     source_lines: list[str],
