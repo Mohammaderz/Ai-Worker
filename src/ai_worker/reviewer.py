@@ -348,12 +348,11 @@ def _hunk_dynamic_execution_lines(
     imported_call_aliases: set[str] | None = None,
     imported_module_aliases: set[str] | None = None,
 ) -> set[int]:
-    """Detect dangerous calls using alias state at each statement's execution point."""
+    """Detect dangerous calls using sequential aliases and branch-local states."""
     if not source_lines:
         return set()
     tree = _parse_security_hunk(source_lines)
     if tree is None:
-        # Incomplete hunks retain direct-call detection; alias guesses are unsafe.
         return {
             index
             for index in added_lines
@@ -365,32 +364,54 @@ def _hunk_dynamic_execution_lines(
         if tree.body and isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef))
         else []
     )
-    call_aliases = set(imported_call_aliases or ())
-    module_aliases = set(imported_module_aliases or ())
     detected: set[int] = set()
 
-    for statement in sorted(wrapper_body, key=lambda item: (item.lineno, item.col_offset)):
-        # Inspect before applying bindings: a call uses the previous binding.
-        for node in ast.walk(statement):
-            if not isinstance(node, ast.Call):
+    def inspect_calls(node: ast.AST, calls: set[str], modules: set[str]) -> None:
+        for child in ast.walk(node):
+            if not isinstance(child, ast.Call):
                 continue
-            function = node.func
+            function = child.func
             dangerous = (
                 isinstance(function, ast.Name)
-                and function.id in ({"eval", "exec"} | call_aliases)
+                and function.id in ({"eval", "exec"} | calls)
             ) or (
                 isinstance(function, ast.Attribute)
                 and function.attr in {"eval", "exec"}
                 and isinstance(function.value, ast.Name)
-                and function.value.id in ({"builtins", "__builtins__"} | module_aliases)
+                and function.value.id in ({"builtins", "__builtins__"} | modules)
             )
-            hunk_line = node.lineno - 1
+            hunk_line = child.lineno - 1
             if dangerous and hunk_line in added_lines:
                 detected.add(hunk_line)
 
-        call_aliases, module_aliases = _collect_dynamic_execution_aliases(
-            [statement], call_aliases, module_aliases
-        )
+    def scan_block(
+        statements: list[ast.stmt], calls: set[str], modules: set[str]
+    ) -> tuple[set[str], set[str]]:
+        calls, modules = set(calls), set(modules)
+        for statement in sorted(statements, key=lambda item: (item.lineno, item.col_offset)):
+            if isinstance(statement, ast.If):
+                inspect_calls(statement.test, calls, modules)
+                body_calls, body_modules = scan_block(
+                    statement.body, calls, modules
+                )
+                else_calls, else_modules = scan_block(
+                    statement.orelse, calls, modules
+                )
+                # A name may be dangerous on either path; union is intentionally
+                # conservative after a branch whose runtime condition is unknown.
+                calls = body_calls | else_calls
+                modules = body_modules | else_modules
+                continue
+
+            inspect_calls(statement, calls, modules)
+            calls, modules = _collect_dynamic_execution_aliases(
+                [statement], calls, modules
+            )
+        return calls, modules
+
+    initial_calls = set(imported_call_aliases or ())
+    initial_modules = set(imported_module_aliases or ())
+    scan_block(wrapper_body, initial_calls, initial_modules)
     return detected
 
 def _detect_static_security_findings(
