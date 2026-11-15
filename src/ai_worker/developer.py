@@ -354,6 +354,8 @@ def validate_patch_text(diff: str) -> list[str]:
             raise PatchError("Submodule changes are not allowed")
         elif re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 120000", line):
             raise PatchError("Symlink changes are not allowed")
+        elif re.fullmatch(r"index [0-9a-f]+\\.\\.[0-9a-f]+ 160000", line):
+            raise PatchError("Submodule changes are not allowed")
 
     finish_section()
     if not paths:
