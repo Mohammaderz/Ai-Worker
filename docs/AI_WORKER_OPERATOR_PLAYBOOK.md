@@ -245,8 +245,9 @@ This section supersedes earlier checkpoint SHAs and PR states above. The connect
   - `tests/test_reviewer_contract.py` and `tests/test_qa_results.py`: adversarial schema, path, status, numeric, and fail-closed checks.
   - `docs/REVIEWER-QA-CONTRACT.md`: scope and integration boundaries.
 - These modules are data contracts only. They do not call a reviewer model, execute commands, integrate into the task pipeline, or authorize any external submission. The independent reviewer is not yet operational.
-- Draft PR #10: https://github.com/Mohammaderz/AI-Worker/pull/10; base `feat/repository-intelligence-qa-profile`, head `feat/reviewer-contract-qa-results`, head SHA `8c8cc8bdd40f6a9d8d1a41494024defab8f0dc01`; open, draft, unmerged, mergeable at the latest check.
-- GitHub Actions run #405 (`43716893862`) completed successfully for that exact head: `pytest -q` reported **125 passed in 0.35s**; macOS bootstrap shell syntax, Python sandbox image build, Node sandbox image build, Node/TypeScript smoke, isolated execution smoke, and sandbox patch-application smoke all completed successfully.
+- Draft PR #10: https://github.com/Mohammaderz/AI-Worker/pull/10; base `feat/repository-intelligence-qa-profile`, head `feat/reviewer-contract-qa-results`; current head at this verification `a51b54e7951d883c11adc70cfbbcf32eda947da8` (documentation checkpoint), with implementation commit `8c8cc8bdd40f6a9d8d1a41494024defab8f0dc01`; open, draft, unmerged, mergeable at the latest check.
+- GitHub Actions run #405 (`43716893862`) for the implementation commit completed successfully: `pytest -q` reported **125 passed in 0.35s**; macOS bootstrap shell syntax, Python sandbox image build, Node sandbox image build, Node/TypeScript smoke, isolated execution smoke, and sandbox patch-application smoke all completed successfully.
+- The documentation checkpoint head also passed GitHub Actions run #407 (`43717024097`): `pytest -q` reported **125 passed in 0.29s** and all sandbox/bootstrap smoke steps completed successfully.
 - No local Mac tests were run; the connected environment does not expose the user's Mac.
 - No tasks were claimed, no client was contacted, no third-party code was submitted, no PR was merged, and no payment was made or received.
 
