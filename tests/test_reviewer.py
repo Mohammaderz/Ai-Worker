@@ -657,3 +657,86 @@ def test_ast_security_scanner_does_not_flag_safe_alias_inside_if_branch():
 +    run_code(user_input)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_detects_eval_alias_inside_for_loop():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++for item in items:
++    run_code = eval
++    run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_tracks_possible_alias_after_while_loop():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++while condition:
++    run_code = eval
++run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_detects_eval_alias_inside_with_block():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++with manager:
++    run_code = eval
++    run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_detects_eval_alias_inside_try_block():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++try:
++    run_code = eval
++    run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_detects_eval_alias_inside_match_case():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++match value:
++    case 1:
++        eval(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_keeps_safe_aliases_in_loop_body_unflagged():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++for item in items:
++    run_code = safe_function
++    run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
