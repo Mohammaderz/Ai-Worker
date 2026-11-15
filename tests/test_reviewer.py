@@ -1024,7 +1024,7 @@ def test_ast_security_scanner_detects_eval_before_walrus_rebinding():
 --- a/sample.py
 +++ b/sample.py
 @@ -0,0 +1,1 @@
-+result = (eval(source) if (eval := safe_callable) else None)
++result = (eval(source) and (eval := safe_callable))
 """
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
