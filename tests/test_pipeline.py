@@ -81,7 +81,7 @@ def test_pipeline_blocks_unresolved_questions_without_applying_patch(monkeypatch
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="local", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
+            model="local", status="needs_information", diff="", changed_files=[],
             questions=["Need clarify API contract"], to_dict=lambda: {"diff": "draft"}
         ),
     )
@@ -95,7 +95,7 @@ def test_pipeline_blocks_unresolved_questions_without_applying_patch(monkeypatch
         scratch_root=tmp_path / "scratch",
         output_root=tmp_path / "proposals",
     )
-    assert result.status == "blocked_for_human_review"
+    assert result.status == "needs_human_clarification"
     assert (tmp_path / "proposals").exists()
     assert (tmp_path / "proposals" / next((tmp_path / "proposals").iterdir()).name / "REPORT.md").exists()
 
@@ -119,7 +119,7 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="local", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
+            model="local", status="patch", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
             questions=[], to_dict=lambda: {"diff": "draft"}
         ),
     )
@@ -175,7 +175,7 @@ def test_pipeline_holds_high_value_bounties_for_manual_verification(monkeypatch,
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="local", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
+            model="local", status="patch", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
             questions=[], to_dict=lambda: {"diff": "draft"}
         ),
     )
@@ -214,7 +214,7 @@ def test_pipeline_runs_node_syntax_check_in_node_sandbox(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="local", diff="diff --git a/src/index.ts b/src/index.ts",
+            model="local", status="patch", diff="diff --git a/src/index.ts b/src/index.ts",
             changed_files=["src/index.ts"], questions=[], to_dict=lambda: {"diff": "draft"}
         ),
     )

@@ -132,12 +132,12 @@ def run_pipeline(
             timeout=min(timeout, 900),
         )
         _write_json(output_dir / "proposal.json", proposal.to_dict())
-        if proposal.diff:
+        if proposal.status == "patch":
             (output_dir / "proposal.patch").write_text(proposal.diff, encoding="utf-8")
 
         node_static_code = None
         node_static_log = ""
-        if not proposal.diff:
+        if proposal.status == "needs_information":
             status = "needs_human_clarification"
             message = "The model did not produce a safe diff. Review the plan and questions; no patch was applied."
             compile_code = tests_code = None
