@@ -59,3 +59,9 @@ A local SQLite task_outcomes table tracks claimed, in-progress, submitted, accep
 
 ## Metrics
 Track qualified opportunities, GitHub-issue-compatible links, adapter backlog, verified submissions, acceptance rate, gross rewards, fees, net paid rewards and payout latency. Listed rewards are not earnings.
+
+
+## Independent reviewer and deterministic QA contracts
+The reviewer contract in `ai_worker.reviewer` validates bounded structured decisions (`approve`, `request_changes`, or `inconclusive`) and evidence-backed findings. It rejects malformed/oversized responses, unsafe paths, duplicate finding IDs, and approvals that still contain critical or high findings. It does not call a model and does not submit or approve external work.
+
+The `ai_worker.qa` module records deterministic check outcomes: `passed`, `failed`, `skipped`, `unavailable`, or `not_run`. Overall status is derived from individual required checks; it is never trusted from an LLM or caller-supplied aggregate. These are currently standalone data contracts, not yet wired into the pipeline or Docker runner. The next step is to translate actual sandbox exit codes into QACheck records and feed those records to a separate reviewer. Any reviewer error or inconclusive result must remain blocked for human review.

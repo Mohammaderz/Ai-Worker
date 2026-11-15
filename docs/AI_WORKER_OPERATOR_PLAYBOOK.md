@@ -210,3 +210,47 @@ These are reported case studies and platform dashboards, not audited guarantees.
 - Official Olas dashboard figures are aggregate ecosystem totals and may include activity from many agents and payment rails.
 - Jobbi counts are a changing index snapshot; reward listings are not cash flow.
 - Recheck source terms, APIs, fee schedules, payout rules, and current figures before implementation or any user commitment.
+
+
+## 12. Live repository verification and next implementation slice — 2026-11-15 12:54 UTC
+This section supersedes earlier checkpoint SHAs and PR states above. The connected GitHub API was queried directly.
+
+### Repository baseline
+- Canonical repository: `Mohammaderz/AI-Worker`; default branch `main`; public; connected permissions currently include push/admin.
+- Verified `main` head: `6f89b6dca43ba635e53ec9b2281a7e03814034fa` (2026-11-14 commit documenting realized payout latency metrics).
+- `README.md` and `docs/ARCHITECTURE.md` exist on `main`.
+- `docs/PROJECT_BRIEF.md` returned GitHub 404 on `main`; no project brief is present at that path. Do not assume one exists.
+- All PRs below were open and unmerged at this check; no changes were made to `main`.
+
+### Live open PR topology and CI
+| PR | Base | Head SHA | State | Latest verified CI |
+|---|---|---|---|---|
+| #5 Marketplace discovery / Bounty API / repo profile | main | `0df6b02765632c57fa7444f0185f01b1661b54bc` | open, ready for review | run 43686811383 success; 91 pytest passed |
+| #6 Payout-evidence ranking and source economics | main | `c8783d404c63686a08eb4082c57e335cc85ab2a8` | open, draft | run 43686718503 success; 89 pytest passed |
+| #7 Diversified opportunity portfolio | PR #6 branch | `21d49eaf3063f3f014613778bd10dbb4521ebd5e` | open, draft | run 43617716860 success; 105 pytest passed |
+| #8 Issue-aware repository context | main | `cae31e4945b70123e10ee4132aa3e54705432ca9` | open, ready for review | run 43686724998 success; 82 pytest passed |
+| #9 Production income-engine roadmap | main | `be899efb79a75c85ed45c63af31f34ad92918bc3` | open, draft, docs-only | run 43686982700 success; 74 pytest passed by workflow |
+- PR #7 is stacked on PR #6. Its base SHA at the PR snapshot was `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b`, while PR #6's current head is `c8783d404c63686a08eb4082c57e335cc85ab2a8`; recheck/synchronize this base and rerun CI before considering #7 ready.
+- PR #5's current description accurately says it is ready for review and not merged. Its current changes include real CR/LF API-key rejection tests and removal of unsupported daily-income claims.
+- PR #6's paid-row index correction is included and CI is green.
+- PR #8 bounds issue-context traversal (20,000 entries, 2,000 candidates, 2 MB source read) and has regression tests.
+- PR #9 adds `docs/IMPLEMENTATION-ROADMAP-INCOME-ENGINE.md` and `docs/REVIEW-FINDINGS-2026-11-15.md`; the roadmap calls for the reviewer contract + deterministic QA model + adversarial tests as the next slice.
+- Relevant PRs: https://github.com/Mohammaderz/AI-Worker/pull/5, /pull/6, /pull/7, /pull/8, /pull/9.
+
+### New reviewer/QA contract slice
+- A new feature branch `feat/reviewer-contract-qa-results` was created from the current PR #5 head `0df6b02765632c57fa7444f0185f01b1661b54bc`, so it preserves the PR #5 operator playbook and its code without duplicating work on `main`.
+- Added files in the pending branch commit:
+  - `src/ai_worker/reviewer.py`: strict versioned reviewer finding/result contract and bounded parser; critical/high findings prevent an approve decision.
+  - `src/ai_worker/qa.py`: strict QA check/result contract with passed/failed/skipped/unavailable/not_run states and derived overall status.
+  - `tests/test_reviewer_contract.py` and `tests/test_qa_results.py`: adversarial schema, path, status, numeric, and fail-closed checks.
+  - `docs/REVIEWER-QA-CONTRACT.md`: scope and integration boundaries.
+- These modules are data contracts only. They do not call a reviewer model, execute commands, integrate into the task pipeline, or authorize any external submission. The independent reviewer is not yet operational.
+- CI status for this new commit is pending until the Actions run is queried. No local Mac tests were run; the connected environment does not expose the user's Mac.
+- No tasks were claimed, no client was contacted, no third-party code was submitted, no PR was merged, and no payment was made or received.
+
+### Next actions
+1. Verify the new feature branch commit and its GitHub Actions run; fix any failures and rerun only after inspecting logs.
+2. Open a **draft** PR stacked on PR #5, clearly documenting that dependency and that the reviewer is a contract only.
+3. After PR #5/#8 code is reconciled, integrate actual sandbox exit codes into QACheck and add an independent reviewer invocation with bounded time/retry/cost controls. Reviewer errors or inconclusive results must block.
+4. Add seeded vulnerable, incorrect, incomplete and out-of-scope patch fixtures; measure reviewer defect detection and false-positive rates before using it as a gate.
+5. Do not merge any PR or perform external marketplace/payment actions without the required explicit approval.
