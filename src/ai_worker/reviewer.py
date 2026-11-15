@@ -186,10 +186,12 @@ def _line_has_dynamic_execution(source: str) -> bool:
 
 def _collect_dynamic_execution_aliases(
     statements: list[ast.stmt],
+    initial_call_aliases: set[str] | None = None,
+    initial_module_aliases: set[str] | None = None,
 ) -> tuple[set[str], set[str]]:
     """Collect straightforward, sequential imports and assignments of eval/exec."""
-    call_aliases: set[str] = set()
-    module_aliases: set[str] = {"builtins", "__builtins__"}
+    call_aliases: set[str] = set(initial_call_aliases or ())
+    module_aliases: set[str] = {"builtins", "__builtins__"} | set(initial_module_aliases or ())
 
     def dangerous_callable(value: ast.expr) -> bool:
         if isinstance(value, ast.Name):
@@ -249,13 +251,21 @@ def _collect_dynamic_execution_aliases(
     return call_aliases, module_aliases
 
 
-def _module_dynamic_execution_aliases(source: str) -> tuple[set[str], set[str]]:
-    """Collect builtins execution aliases from a complete Python module."""
+def _module_dynamic_execution_aliases(
+    source: str, before_line: int | None = None
+) -> tuple[set[str], set[str]]:
+    """Collect aliases established before a source line in a complete module."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return set(), {"builtins", "__builtins__"}
-    return _collect_dynamic_execution_aliases(tree.body)
+    statements = tree.body
+    if before_line is not None:
+        statements = [
+            node for node in statements
+            if getattr(node, "end_lineno", node.lineno) < before_line
+        ]
+    return _collect_dynamic_execution_aliases(statements)
 
 
 def _read_changed_python_sources(workspace: str, diff: str) -> dict[str, str]:
@@ -338,49 +348,50 @@ def _hunk_dynamic_execution_lines(
     imported_call_aliases: set[str] | None = None,
     imported_module_aliases: set[str] | None = None,
 ) -> set[int]:
-    """Return added hunk line indexes that call dynamic execution functions."""
+    """Detect dangerous calls using alias state at each statement's execution point."""
     if not source_lines:
         return set()
     tree = _parse_security_hunk(source_lines)
     if tree is None:
-        # Incomplete diff hunks are common; retain conservative per-line detection.
+        # Incomplete hunks retain direct-call detection; alias guesses are unsafe.
         return {
             index
             for index in added_lines
             if _line_has_dynamic_execution(source_lines[index - 1])
         }
 
-    call_aliases = set(imported_call_aliases or ())
-    module_aliases = {"builtins", "__builtins__"} | set(imported_module_aliases or ())
     wrapper_body = (
         tree.body[0].body
         if tree.body and isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef))
         else []
     )
-    local_calls, local_modules = _collect_dynamic_execution_aliases(wrapper_body)
-    call_aliases.update(local_calls)
-    module_aliases.update(local_modules)
-
+    call_aliases = set(imported_call_aliases or ())
+    module_aliases = set(imported_module_aliases or ())
     detected: set[int] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        function = node.func
-        dangerous = (
-            isinstance(function, ast.Name)
-            and function.id in ({"eval", "exec"} | call_aliases)
-        ) or (
-            isinstance(function, ast.Attribute)
-            and function.attr in {"eval", "exec"}
-            and isinstance(function.value, ast.Name)
-            and function.value.id in module_aliases
-        )
-        # The wrapper occupies line 1; AST line numbers map to hunk lines by -1.
-        hunk_line = node.lineno - 1
-        if dangerous and hunk_line in added_lines:
-            detected.add(hunk_line)
-    return detected
 
+    for statement in sorted(wrapper_body, key=lambda item: (item.lineno, item.col_offset)):
+        # Inspect before applying bindings: a call uses the previous binding.
+        for node in ast.walk(statement):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            dangerous = (
+                isinstance(function, ast.Name)
+                and function.id in ({"eval", "exec"} | call_aliases)
+            ) or (
+                isinstance(function, ast.Attribute)
+                and function.attr in {"eval", "exec"}
+                and isinstance(function.value, ast.Name)
+                and function.value.id in ({"builtins", "__builtins__"} | module_aliases)
+            )
+            hunk_line = node.lineno - 1
+            if dangerous and hunk_line in added_lines:
+                detected.add(hunk_line)
+
+        call_aliases, module_aliases = _collect_dynamic_execution_aliases(
+            [statement], call_aliases, module_aliases
+        )
+    return detected
 
 def _detect_static_security_findings(
     diff: str, source_files: dict[str, str] | None = None
@@ -404,22 +415,16 @@ def _detect_static_security_findings(
         if current_file is None or not current_file.endswith(".py"):
             file_hunks.clear()
             return
-        # Resolve import aliases across all visible hunks in this file before
-        # checking calls, so the import and call need not share one hunk.
-        call_aliases: set[str] = set()
-        module_aliases: set[str] = {"builtins", "__builtins__"}
         full_source = (source_files or {}).get(current_file)
-        if full_source is not None:
-            calls, modules = _module_dynamic_execution_aliases(full_source)
-            call_aliases.update(calls)
-            module_aliases.update(modules)
-        for lines, _, _ in file_hunks:
-            calls, modules = _hunk_dynamic_execution_aliases(lines)
-            call_aliases.update(calls)
-            module_aliases.update(modules)
+        prior_call_aliases: set[str] = set()
+        prior_module_aliases: set[str] = set()
         for lines, line_numbers, added in file_hunks:
+            if full_source is not None and line_numbers:
+                prior_call_aliases, prior_module_aliases = (
+                    _module_dynamic_execution_aliases(full_source, line_numbers[0])
+                )
             detected = _hunk_dynamic_execution_lines(
-                lines, added, call_aliases, module_aliases
+                lines, added, prior_call_aliases, prior_module_aliases
             )
             for hunk_index in sorted(detected):
                 findings.append({
@@ -430,6 +435,10 @@ def _detect_static_security_findings(
                     "evidence": "Added Python code calls eval()/exec(), which can execute attacker-controlled code.",
                     "recommendation": "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
                 })
+            if full_source is None:
+                prior_call_aliases, prior_module_aliases = (
+                    _hunk_dynamic_execution_aliases(lines)
+                )
         file_hunks.clear()
 
     for diff_line in diff.splitlines():
