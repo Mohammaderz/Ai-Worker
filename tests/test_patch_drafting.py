@@ -244,3 +244,27 @@ def test_draft_patch_repairs_invalid_json_response(monkeypatch, tmp_path):
         draft_patch(ISSUE, tmp_path)
 
     assert opener.calls == 2
+
+
+def test_context_scan_has_a_hard_candidate_limit(monkeypatch, tmp_path):
+    for index in range(8):
+        (tmp_path / f"file_{index:02}.py").write_text(
+            f"value = {index}", encoding="utf-8"
+        )
+    monkeypatch.setattr("ai_worker.developer.MAX_CONTEXT_SCAN_FILES", 3)
+
+    context = collect_repo_context(tmp_path)
+
+    assert [item["path"] for item in context] == [
+        "file_00.py", "file_01.py", "file_02.py"
+    ]
+
+
+def test_context_scan_has_a_hard_byte_budget(monkeypatch, tmp_path):
+    (tmp_path / "a.py").write_text("12345678", encoding="utf-8")
+    (tmp_path / "b.py").write_text("abcdefgh", encoding="utf-8")
+    monkeypatch.setattr("ai_worker.developer.MAX_CONTEXT_SCAN_BYTES", 10)
+
+    context = collect_repo_context(tmp_path)
+
+    assert [item["path"] for item in context] == ["a.py"]
