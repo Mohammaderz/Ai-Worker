@@ -232,16 +232,33 @@ def _safe_patch_path(value: str) -> str:
 
 
 def validate_patch_text(diff: str) -> list[str]:
+    """Validate the structure and safety of a text-only unified Git patch.
+
+    Git's own `git apply --check` remains the final authority, but malformed
+    model output is rejected here before it reaches the sandbox.
+    """
     if not isinstance(diff, str) or not diff or len(diff.encode("utf-8")) > MAX_PATCH_BYTES:
         raise PatchError("Patch is empty or exceeds the 100 KiB limit")
-    if "\x00" in diff or "GIT binary patch" in diff or "Binary files " in diff:
+    if "\\x00" in diff or "GIT binary patch" in diff or "Binary files " in diff:
         raise PatchError("Binary or NUL-containing patches are not supported")
 
     paths: list[str] = []
     current_path: str | None = None
-    in_hunk = False
+    old_header_seen = False
+    new_header_seen = False
+    hunk_seen = False
+
+    def finish_section() -> None:
+        if current_path is None:
+            return
+        if not old_header_seen or not new_header_seen:
+            raise PatchError(f"Patch section for {current_path!r} is missing --- or +++ headers")
+        if not hunk_seen:
+            raise PatchError(f"Patch section for {current_path!r} contains no unified diff hunks")
+
     for line in diff.splitlines():
         if line.startswith("diff --git "):
+            finish_section()
             parts = line[len("diff --git "):].split(" ")
             if len(parts) != 2 or not parts[0].startswith("a/") or not parts[1].startswith("b/"):
                 raise PatchError("Patch contains an unsupported Git diff header")
@@ -250,28 +267,47 @@ def validate_patch_text(diff: str) -> list[str]:
             if old_path != new_path:
                 raise PatchError("Renames and copies are not supported in the first patch runner")
             current_path = new_path
-            in_hunk = False
+            old_header_seen = False
+            new_header_seen = False
+            hunk_seen = False
             paths.append(new_path)
+            continue
+
+        if current_path is None:
+            if line.strip():
+                raise PatchError("Patch content appeared before a Git diff header")
+            continue
+
+        if line.startswith("--- "):
+            if old_header_seen or hunk_seen:
+                raise PatchError("Patch contains a duplicate or misplaced --- header")
+            value = line[4:].split("\\t", 1)[0]
+            if value != "/dev/null":
+                if not value.startswith("a/") or _safe_patch_path(value[2:]) != current_path:
+                    raise PatchError("Patch old-file header does not match its Git diff header")
+            old_header_seen = True
+        elif line.startswith("+++ "):
+            if not old_header_seen or new_header_seen or hunk_seen:
+                raise PatchError("Patch contains a misplaced +++ header")
+            value = line[4:].split("\\t", 1)[0]
+            if value != "/dev/null":
+                if not value.startswith("b/") or _safe_patch_path(value[2:]) != current_path:
+                    raise PatchError("Patch new-file header does not match its Git diff header")
+            new_header_seen = True
         elif line.startswith("@@"):
-            in_hunk = True
-        elif not in_hunk and (line.startswith("--- ") or line.startswith("+++ ")):
-            if current_path is None:
-                raise PatchError("Patch file headers appeared before a Git diff header")
-            value = line[4:].split("\t", 1)[0]
-            if value == "/dev/null":
-                continue
-            expected_prefix = "a/" if line.startswith("--- ") else "b/"
-            if not value.startswith(expected_prefix):
-                raise PatchError("Patch contains an absolute or unsupported file header")
-            if _safe_patch_path(value[2:]) != current_path:
-                raise PatchError("Patch file header does not match its Git diff header")
+            if not old_header_seen or not new_header_seen:
+                raise PatchError("Patch hunk appeared before both file headers")
+            if not re.match(r"^@@ -\\d+(?:,\\d+)? \\+\\d+(?:,\\d+)? @@", line):
+                raise PatchError("Patch contains a malformed unified diff hunk header")
+            hunk_seen = True
         elif line in {"new file mode 120000", "old mode 120000", "new mode 120000"}:
             raise PatchError("Symlink changes are not allowed")
         elif line in {"new file mode 160000", "old mode 160000", "new mode 160000"}:
             raise PatchError("Submodule changes are not allowed")
-        elif re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 120000", line):
+        elif re.fullmatch(r"index [0-9a-f]+\\.\\.[0-9a-f]+ 120000", line):
             raise PatchError("Symlink changes are not allowed")
 
+    finish_section()
     if not paths:
         raise PatchError("No Git file changes were found in the patch")
     if len(paths) > MAX_PATCH_FILES:
@@ -279,7 +315,6 @@ def validate_patch_text(diff: str) -> list[str]:
     if len(set(paths)) != len(paths):
         raise PatchError("Patch contains duplicate file sections")
     return paths
-
 
 def _validate_patch_response(data: object) -> dict:
     required = {"status", "summary", "diff", "assumptions", "questions"}
