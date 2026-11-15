@@ -615,3 +615,45 @@ def test_ast_security_scanner_respects_safe_rebinding_in_full_source():
         {"sample.py": "import builtins as core\ncore = safe_module\ncore.exec(user_input)\n"},
     )
     assert findings == []
+
+
+def test_ast_security_scanner_detects_eval_alias_inside_if_branch():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++if condition:
++    run_code = eval
++    run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_tracks_possible_alias_after_if_branch():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,5 @@
++if condition:
++    run_code = eval
++else:
++    run_code = safe_function
++run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 5
+
+
+def test_ast_security_scanner_does_not_flag_safe_alias_inside_if_branch():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++if condition:
++    run_code = safe_function
++    run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
