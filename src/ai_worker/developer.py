@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -17,6 +18,9 @@ MAX_PATCH_BYTES = 100_000
 MAX_PATCH_FILES = 25
 MAX_CONTEXT_BYTES = 120_000
 MAX_CONTEXT_FILES = 60
+MAX_CONTEXT_SCAN_ENTRIES = 20_000
+MAX_CONTEXT_SCAN_FILES = 2_000
+MAX_CONTEXT_SCAN_BYTES = 2_000_000
 BLOCKED_NAMES = {
     ".env", ".npmrc", ".netrc", ".pypirc", "id_rsa", "id_ed25519",
 }
@@ -83,7 +87,11 @@ class PatchApplyResult:
 
 
 def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = None) -> list[dict[str, str]]:
-    """Read safe text files and rank them by issue relevance in both paths and contents."""
+    """Read bounded repository context and rank files by issue relevance.
+
+    Traversal, candidate count, and bytes read are capped because repository
+    contents are untrusted. Directory and filename ordering is deterministic.
+    """
     root = Path(workspace).resolve(strict=True)
     if not root.is_dir():
         raise PatchError("Repository workspace must be a directory")
@@ -105,64 +113,92 @@ def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = No
         }
 
     candidates: list[tuple[int, str, str]] = []
+    entries_seen = 0
+    files_read = 0
+    bytes_read = 0
+    stop_scan = False
 
-    for path in root.rglob("*"):
-        if path.is_symlink() or not path.is_file():
-            continue
-        relative = path.relative_to(root)
-        if any(part in EXCLUDED_DIRS for part in relative.parts[:-1]):
-            continue
-        name = path.name.lower()
-        if (
-            name.startswith(".env")
-            or name in BLOCKED_NAMES
-            or name.startswith(("credentials", "secrets"))
-            or name.endswith((".pem", ".key", ".p12", ".pfx"))
-            or path.suffix.lower() not in ALLOWED_SUFFIXES
-            or path.stat().st_size > 20_000
-        ):
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if "\x00" in content:
-            continue
+    for current, dirs, filenames in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        dirs[:] = sorted(
+            directory for directory in dirs
+            if directory not in EXCLUDED_DIRS
+            and not (current_path / directory).is_symlink()
+        )
+        entries_seen += len(dirs)
+        if entries_seen >= MAX_CONTEXT_SCAN_ENTRIES:
+            break
 
-        relative_name = relative.as_posix()
-        path_terms = set(re.findall(r"[a-z0-9]{3,}", relative_name.lower()))
-        content_terms = set(re.findall(r"[a-z0-9]{3,}", content.lower()))
+        for filename in sorted(filenames, key=str.lower):
+            entries_seen += 1
+            if entries_seen > MAX_CONTEXT_SCAN_ENTRIES:
+                stop_scan = True
+                break
 
-        path_hits = issue_terms & path_terms
-        content_hits = issue_terms & content_terms
+            path = current_path / filename
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                relative = path.relative_to(root)
+                name = path.name.lower()
+                if (
+                    name.startswith(".env")
+                    or name in BLOCKED_NAMES
+                    or name.startswith(("credentials", "secrets"))
+                    or name.endswith((".pem", ".key", ".p12", ".pfx"))
+                    or path.suffix.lower() not in ALLOWED_SUFFIXES
+                ):
+                    continue
+                size = path.stat().st_size
+                if size > 20_000:
+                    continue
+                if files_read >= MAX_CONTEXT_SCAN_FILES:
+                    stop_scan = True
+                    break
+                if bytes_read + size > MAX_CONTEXT_SCAN_BYTES:
+                    continue
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
 
-        # Prefer explicit path matches, then files whose contents discuss the issue.
-        score = len(path_hits) * 5 + len(content_hits) * 3
-        if issue_terms:
-            score += sum(
-                min(content.lower().count(term), 3)
-                for term in content_hits
-            )
+            if "\x00" in content:
+                continue
 
-        candidates.append((score, relative_name, content))
+            encoded_size = len(content.encode("utf-8"))
+            if bytes_read + encoded_size > MAX_CONTEXT_SCAN_BYTES:
+                continue
+            bytes_read += encoded_size
+            files_read += 1
+
+            relative_name = relative.as_posix()
+            content_lower = content.lower()
+            path_terms = set(re.findall(r"[a-z0-9]{3,}", relative_name.lower()))
+            content_terms = set(re.findall(r"[a-z0-9]{3,}", content_lower))
+            path_hits = issue_terms & path_terms
+            content_hits = issue_terms & content_terms
+
+            score = len(path_hits) * 5 + len(content_hits) * 3
+            if issue_terms:
+                score += sum(min(content_lower.count(term), 3) for term in content_hits)
+            candidates.append((score, relative_name, content))
+
+        if stop_scan:
+            break
 
     candidates.sort(key=lambda item: (-item[0], item[1].lower()))
 
     result: list[dict[str, str]] = []
     total_bytes = 0
-
     for _, relative_name, content in candidates:
         if len(result) >= MAX_CONTEXT_FILES:
             break
         remaining = MAX_CONTEXT_BYTES - total_bytes
         if remaining <= 0:
             break
-
         encoded = content.encode("utf-8")
         if len(encoded) > remaining:
             content = encoded[:remaining].decode("utf-8", errors="ignore")
             encoded = content.encode("utf-8")
-
         result.append({"path": relative_name, "content": content})
         total_bytes += len(encoded)
 
@@ -196,6 +232,7 @@ def _safe_patch_path(value: str) -> str:
 
 
 def validate_patch_text(diff: str) -> list[str]:
+    """Validate bounded text-only Git patches, including exact hunk line counts."""
     if not isinstance(diff, str) or not diff or len(diff.encode("utf-8")) > MAX_PATCH_BYTES:
         raise PatchError("Patch is empty or exceeds the 100 KiB limit")
     if "\x00" in diff or "GIT binary patch" in diff or "Binary files " in diff:
@@ -203,39 +240,124 @@ def validate_patch_text(diff: str) -> list[str]:
 
     paths: list[str] = []
     current_path: str | None = None
+    old_header_seen = new_header_seen = hunk_seen = False
     in_hunk = False
+    old_expected = new_expected = old_seen = new_seen = 0
+    hunk_pattern = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$")
+
+    def finish_hunk() -> None:
+        nonlocal in_hunk
+        if in_hunk:
+            if (old_seen, new_seen) != (old_expected, new_expected):
+                raise PatchError(
+                    f"Patch hunk for {current_path!r} has incorrect line counts "
+                    f"(expected -{old_expected}/+{new_expected}, found -{old_seen}/+{new_seen})"
+                )
+            in_hunk = False
+
+    def finish_section() -> None:
+        finish_hunk()
+        if current_path is not None:
+            if not old_header_seen or not new_header_seen:
+                raise PatchError(f"Patch section for {current_path!r} is missing --- or +++ headers")
+            if not hunk_seen:
+                raise PatchError(f"Patch section for {current_path!r} contains no unified diff hunks")
+
     for line in diff.splitlines():
         if line.startswith("diff --git "):
+            finish_section()
             parts = line[len("diff --git "):].split(" ")
-            if len(parts) != 2 or not parts[0].startswith("a/") or not parts[1].startswith("b/"):
-                raise PatchError("Patch contains an unsupported Git diff header")
+            if len(parts) != 2 or not parts[0].startswith("a/") or not parts[1].startswith("b/") or '"' in line:
+                raise PatchError("Patch contains an unsupported or quoted Git diff path")
             old_path = _safe_patch_path(parts[0][2:])
             new_path = _safe_patch_path(parts[1][2:])
             if old_path != new_path:
                 raise PatchError("Renames and copies are not supported in the first patch runner")
             current_path = new_path
+            old_header_seen = new_header_seen = hunk_seen = False
             in_hunk = False
             paths.append(new_path)
-        elif line.startswith("@@"):
-            in_hunk = True
-        elif not in_hunk and (line.startswith("--- ") or line.startswith("+++ ")):
-            if current_path is None:
-                raise PatchError("Patch file headers appeared before a Git diff header")
-            value = line[4:].split("\t", 1)[0]
-            if value == "/dev/null":
+            continue
+
+        if current_path is None:
+            if line.strip():
+                raise PatchError("Patch content appeared before a Git diff header")
+            continue
+
+        # Within a hunk, ---/+++ are ordinary removed/added source lines.
+        # Only a new hunk header or file header ends the current hunk.
+        if in_hunk and not line.startswith("@@"):
+            if line.startswith("\\ No newline at end of file"):
                 continue
-            expected_prefix = "a/" if line.startswith("--- ") else "b/"
-            if not value.startswith(expected_prefix):
-                raise PatchError("Patch contains an absolute or unsupported file header")
-            if _safe_patch_path(value[2:]) != current_path:
-                raise PatchError("Patch file header does not match its Git diff header")
+            if not line:
+                raise PatchError("Patch contains an unprefixed blank line inside a hunk")
+            if line[0] == " ":
+                old_seen += 1
+                new_seen += 1
+            elif line[0] == "-":
+                old_seen += 1
+            elif line[0] == "+":
+                new_seen += 1
+            else:
+                raise PatchError("Patch contains an invalid unified diff hunk line")
+            if old_seen > old_expected or new_seen > new_expected:
+                raise PatchError("Patch hunk contains more lines than declared")
+            continue
+
+        if line.startswith("--- "):
+            finish_hunk()
+            if old_header_seen or hunk_seen:
+                raise PatchError("Patch contains a duplicate or misplaced --- header")
+            value = line[4:].split("\t", 1)[0]
+            if value != "/dev/null" and (not value.startswith("a/") or _safe_patch_path(value[2:]) != current_path):
+                raise PatchError("Patch old-file header does not match its Git diff header")
+            old_header_seen = True
+        elif line.startswith("+++ "):
+            finish_hunk()
+            if not old_header_seen or new_header_seen or hunk_seen:
+                raise PatchError("Patch contains a misplaced +++ header")
+            value = line[4:].split("\t", 1)[0]
+            if value != "/dev/null" and (not value.startswith("b/") or _safe_patch_path(value[2:]) != current_path):
+                raise PatchError("Patch new-file header does not match its Git diff header")
+            new_header_seen = True
+        elif line.startswith("@@"):
+            finish_hunk()
+            if not old_header_seen or not new_header_seen:
+                raise PatchError("Patch hunk appeared before both file headers")
+            match = hunk_pattern.fullmatch(line)
+            if not match:
+                raise PatchError("Patch contains a malformed unified diff hunk header")
+            old_expected = int(match.group(2) or "1")
+            new_expected = int(match.group(4) or "1")
+            old_seen = new_seen = 0
+            hunk_seen = in_hunk = True
+        elif line.startswith("\\ No newline at end of file"):
+            if not in_hunk:
+                raise PatchError("Patch newline marker appeared outside a hunk")
+        elif in_hunk:
+            if not line:
+                raise PatchError("Patch contains an unprefixed blank line inside a hunk")
+            if line[0] == " ":
+                old_seen += 1
+                new_seen += 1
+            elif line[0] == "-":
+                old_seen += 1
+            elif line[0] == "+":
+                new_seen += 1
+            else:
+                raise PatchError("Patch contains an invalid unified diff hunk line")
+            if old_seen > old_expected or new_seen > new_expected:
+                raise PatchError("Patch hunk contains more lines than declared")
         elif line in {"new file mode 120000", "old mode 120000", "new mode 120000"}:
             raise PatchError("Symlink changes are not allowed")
         elif line in {"new file mode 160000", "old mode 160000", "new mode 160000"}:
             raise PatchError("Submodule changes are not allowed")
         elif re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 120000", line):
             raise PatchError("Symlink changes are not allowed")
+        elif re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 160000", line):
+            raise PatchError("Submodule changes are not allowed")
 
+    finish_section()
     if not paths:
         raise PatchError("No Git file changes were found in the patch")
     if len(paths) > MAX_PATCH_FILES:
@@ -243,7 +365,6 @@ def validate_patch_text(diff: str) -> list[str]:
     if len(set(paths)) != len(paths):
         raise PatchError("Patch contains duplicate file sections")
     return paths
-
 
 def _validate_patch_response(data: object) -> dict:
     required = {"status", "summary", "diff", "assumptions", "questions"}

@@ -45,7 +45,7 @@ ollama serve
 Keep Ollama running in that terminal. Run the following workflow commands in a second terminal. The model download uses disk space and the model's speed depends on your Mac's memory and hardware.
 
 ## One-command local task pipeline
-After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only low-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, REPORT.md and test logs.
+After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only non-high-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, run-manifest.json, REPORT.md and test logs.
 
 ~~~bash
 # Refresh the feed and save eligible candidates
@@ -58,7 +58,7 @@ ai-worker pipeline --gig-id SOURCE:NATIVE_ID
 ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
 ~~~
 
-The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. Python patches receive compileall and detected pytest checks. JavaScript/TypeScript patches receive isolated esbuild syntax transpilation; dependency-aware Node test suites are not run yet because project dependencies are not fetched from untrusted manifests. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions.
+The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. Python patches receive compileall and detected pytest checks. JavaScript/TypeScript patches receive isolated esbuild syntax transpilation; dependency-aware Node test suites are not run yet because project dependencies are not fetched from untrusted manifests. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions. Sandbox stdout/stderr capture is capped at 1 MiB per run. The writable workspace does not yet have a per-run disk quota, so this Docker setup is not a production multi-tenant security boundary.
 
 ## Track real outcomes and payouts
 The local outcome ledger records progress only after you manually claim or submit work. Only a manually recorded `paid` status with the actual received amount counts as income; listed rewards, accepted work and pending payments are not counted as earnings.

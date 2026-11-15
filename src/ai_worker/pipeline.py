@@ -1,7 +1,9 @@
 """End-to-end local bounty workflow with explicit human approval boundaries."""
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -9,7 +11,7 @@ from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
-from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, SandboxError, run_in_sandbox
+from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, MAX_OUTPUT_BYTES, SandboxError, run_in_sandbox
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
@@ -63,6 +65,26 @@ def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+
+def _git_commit(workspace: Path) -> str | None:
+    """Read the cloned source revision without running repository code or hooks."""
+    try:
+        completed = subprocess.run(
+            ["git", "-c", "core.hooksPath=/dev/null", "-C", str(workspace), "rev-parse", "--verify", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    value = completed.stdout.strip()
+    return value if completed.returncode == 0 and len(value) == 40 else None
+
+
+def _sha256_file(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
 def _has_python_files(workspace: Path) -> bool:
     return any(path.is_file() and not path.is_symlink() for path in workspace.rglob("*.py"))
 
@@ -99,6 +121,7 @@ def run_pipeline(
     scratch.mkdir(parents=True, exist_ok=True)
     output_base.mkdir(parents=True, exist_ok=True)
 
+    started_at = datetime.now(timezone.utc).isoformat()
     try:
         brief = inspect_github_issue(issue_url)
         if brief.state.lower() != "open":
@@ -204,7 +227,7 @@ def run_pipeline(
                     or (node_static_code is not None and node_static_code != 0)
                 ):
                     status = "compile_failed"
-                    message = "The isolated Python syntax check failed. Review sandbox logs before proceeding."
+                    message = "An isolated syntax/static check failed. Review the relevant sandbox logs before proceeding."
                 elif tests_detected:
                     test_result = run_in_sandbox(
                         workspace,
@@ -287,6 +310,57 @@ def run_pipeline(
             "",
         ]
         (output_dir / "REPORT.md").write_text("\n".join(lines), encoding="utf-8")
+        finished_at = datetime.now(timezone.utc).isoformat()
+        issue_snapshot = output_dir / "issue.json"
+        proposal_file = output_dir / "proposal.patch"
+        manifest = {
+            "schema_version": 1,
+            "run_id": run_id,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "task": {
+                "issue_url": brief.url,
+                "issue_title": brief.title,
+                "repository": brief.repository,
+                "issue_snapshot_sha256": _sha256_file(issue_snapshot),
+                "source_commit_sha": _git_commit(workspace),
+            },
+            "agent": {
+                "model": proposal.model,
+                "patch_schema": "patch-schema-v1",
+                "policy_version": "2026-11-15",
+                "reviewer_stage": "not_implemented",
+            },
+            "execution": {
+                "python_image": image,
+                "node_image": node_image,
+                "timeout_seconds": timeout,
+                "max_output_bytes": MAX_OUTPUT_BYTES,
+                "network_access": "disabled_in_task_containers",
+                "external_actions": [],
+            },
+            "assessment": {
+                "risk_level": task_plan.risk_level,
+                "blockers": task_plan.blockers,
+                "acceptance_checklist": task_plan.acceptance_checklist,
+                "estimated_effort_hours": estimated_effort,
+            },
+            "proposal": {
+                "status": proposal.status,
+                "summary": getattr(proposal, "summary", ""),
+                "changed_files": proposal.changed_files,
+                "patch_sha256": _sha256_file(proposal_file),
+            },
+            "checks": {
+                "python_compile": {"ran": compile_code is not None, "exit_code": compile_code},
+                "pytest": {"detected": tests_detected, "ran": tests_code is not None, "exit_code": tests_code},
+                "javascript_typescript_syntax": {"ran": node_static_code is not None, "exit_code": node_static_code},
+                "dependency_aware_node_tests": {"ran": False, "reason": "Dependencies are not installed from untrusted manifests."},
+            },
+            "outcome": {"status": status, "message": message},
+            "human_approval_required": True,
+        }
+        _write_json(output_dir / "run-manifest.json", manifest)
         return result
     except (GitHubIssueError, WorkspaceError, OllamaError, PatchError, SandboxError) as exc:
         raise PipelineError(str(exc)) from exc

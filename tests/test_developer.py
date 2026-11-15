@@ -75,3 +75,72 @@ def test_failed_patch_check_never_applies(monkeypatch, tmp_path):
     assert not result.applied
     assert len(calls) == 1
     assert (workspace / ".ai-worker-generated.patch").exists()
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        "diff --git a/hello.txt b/hello.txt\n",
+        "diff --git a/hello.txt b/hello.txt\n--- a/hello.txt\n+++ b/hello.txt\n",
+        "diff --git a/hello.txt b/hello.txt\n--- a/hello.txt\n+++ b/hello.txt\n@@ malformed @@\n-before\n+after\n",
+        "diff --git a/hello.txt b/hello.txt\n+++ b/hello.txt\n@@ -1 +1 @@\n-before\n+after\n",
+    ],
+)
+def test_reject_patch_without_complete_unified_diff_structure(patch):
+    with pytest.raises(PatchError):
+        validate_patch_text(patch)
+
+
+def test_validate_new_file_patch():
+    patch = """diff --git a/new.txt b/new.txt
+new file mode 100644
+--- /dev/null
++++ b/new.txt
+@@ -0,0 +1 @@
++hello
+"""
+    assert validate_patch_text(patch) == ["new.txt"]
+
+
+def test_validate_deleted_file_patch():
+    patch = """diff --git a/old.txt b/old.txt
+deleted file mode 100644
+--- a/old.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-goodbye
+"""
+    assert validate_patch_text(patch) == ["old.txt"]
+
+
+def test_validate_multiple_file_patch():
+    patch = VALID_DIFF + VALID_DIFF.replace("hello.txt", "second.txt")
+    assert validate_patch_text(patch) == ["hello.txt", "second.txt"]
+
+
+def test_reject_hunk_with_incorrect_declared_line_counts():
+    patch = VALID_DIFF.replace("@@ -1 +1 @@", "@@ -1,2 +1 @@")
+    with pytest.raises(PatchError, match="incorrect line counts"):
+        validate_patch_text(patch)
+
+
+def test_reject_quoted_git_paths_until_supported():
+    patch = VALID_DIFF.replace("a/hello.txt b/hello.txt", '"a/hello world.txt" "b/hello world.txt"')
+    with pytest.raises(PatchError, match="quoted Git diff path"):
+        validate_patch_text(patch)
+
+
+def test_accept_executable_bit_change_with_content_hunk():
+    patch = VALID_DIFF.replace("index 1111111..2222222 100644", "old mode 100644\nnew mode 100755")
+    assert validate_patch_text(patch) == ["hello.txt"]
+
+
+def test_validate_source_lines_that_look_like_file_headers():
+    patch = VALID_DIFF.replace("-before", "--- this is source text").replace("+after", "+++ this is new source text")
+    assert validate_patch_text(patch) == ["hello.txt"]
+
+
+def test_reject_submodule_index_mode():
+    patch = VALID_DIFF.replace("100644", "160000")
+    with pytest.raises(PatchError, match="Submodule changes"):
+        validate_patch_text(patch)

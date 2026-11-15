@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -154,6 +155,26 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     assert "did not claim the bounty" in (
         (tmp_path / "proposals" / Path(result.output_dir).name / "REPORT.md").read_text()
     )
+
+    manifest = json.loads((Path(result.output_dir) / "run-manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
+    assert manifest["task"]["repository"] == "acme/widget"
+    assert manifest["agent"]["model"] == "local"
+    assert manifest["checks"]["python_compile"] == {"ran": True, "exit_code": 0}
+    assert manifest["checks"]["pytest"] == {"detected": True, "ran": True, "exit_code": 0}
+    assert manifest["human_approval_required"] is True
+    assert manifest["execution"]["external_actions"] == []
+    assert manifest["execution"]["max_output_bytes"] == 1_000_000
+
+    manifest_path = Path(result.output_dir) / "run-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 1
+    assert manifest["task"]["repository"] == "acme/widget"
+    assert manifest["agent"]["model"] == "local"
+    assert manifest["checks"]["python_compile"] == {"ran": True, "exit_code": 0}
+    assert manifest["checks"]["pytest"] == {"detected": True, "ran": True, "exit_code": 0}
+    assert manifest["human_approval_required"] is True
+    assert manifest["execution"]["external_actions"] == []
 
 
 
