@@ -186,8 +186,8 @@ def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]
     """Return 1-based hunk line indexes where added AST calls begin."""
     if not source_lines:
         return set()
-    wrapped = "async def _review_hunk():\\n" + "".join(
-        "    " + line + "\\n" for line in source_lines
+    wrapped = "async def _review_hunk():\n" + "".join(
+        "    " + line + "\n" for line in source_lines
     )
     try:
         tree = ast.parse(wrapped)
@@ -259,7 +259,7 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
             source_lines = []
             source_line_numbers = []
             added_hunk_lines = set()
-            match = re.search(r"\\+(\\d+)(?:,(\\d+))?", diff_line)
+            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
             if not match:
                 raise ReviewerError("Patch contains an invalid unified-diff hunk header")
             new_line = int(match.group(1))
