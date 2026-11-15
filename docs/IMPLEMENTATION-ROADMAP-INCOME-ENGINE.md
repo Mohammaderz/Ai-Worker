@@ -22,7 +22,7 @@ The primary optimization target is **verified net realized income per engineerin
 
 ## 2. Existing work: do not duplicate it
 
-At the time this specification was written, the following draft PRs were open. The implementation agent must inspect their latest diffs and CI status before starting overlapping work:
+At the time this specification was written, the following PRs were open (draft status varies). The implementation agent must inspect their latest diffs and CI status before starting overlapping work:
 
 - PR #5 — Expand safe marketplace discovery and repository QA:
   - Bounty Agent read-only discovery adapter, bounded repository profiling, source registry, safe credential handling.
@@ -268,7 +268,7 @@ Do not progress to the next autonomy level until the preceding gate is met:
 
 ## 6. Immediate implementation checklist
 
-- [ ] Review and reconcile draft PRs #5–#8; do not duplicate their work.
+- [ ] Review and reconcile open PRs #5–#8; do not duplicate their work.
 - [ ] Confirm main-branch CI and establish a baseline.
 - [ ] Audit the ledger lifecycle and payment-evidence provenance.
 - [ ] Specify and implement the independent reviewer interface and structured result schema.
