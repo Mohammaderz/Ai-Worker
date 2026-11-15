@@ -153,7 +153,7 @@ def test_reviewer_rejects_malformed_unhashable_severity():
 
 def test_static_security_finding_overrides_model_pass(monkeypatch, tmp_path):
     (tmp_path / "sample.py").write_text(
-        "def calculate(expression):\\n    return 0\\n", encoding="utf-8"
+        "def calculate(expression):\n    return 0\n", encoding="utf-8"
     )
 
     class FakeOpener:
