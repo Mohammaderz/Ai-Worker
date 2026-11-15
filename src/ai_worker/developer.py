@@ -80,30 +80,27 @@ class PatchApplyResult:
 
 
 def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = None) -> list[dict[str, str]]:
-    """Read a bounded allowlist of text files; never include .git, env or credential files."""
+    """Read a bounded allowlist and rank files by both issue-path and issue-content relevance."""
     root = Path(workspace).resolve(strict=True)
     if not root.is_dir():
         raise PatchError("Repository workspace must be a directory")
-    result: list[dict[str, str]] = []
-    total_bytes = 0
-    paths = list(root.rglob("*"))
+
+    stop_words = {
+        "the", "and", "for", "with", "when", "that", "this", "from", "into",
+        "should", "would", "could", "does", "have", "has", "are", "was",
+        "were", "been", "being", "not", "but", "can", "all", "any", "its",
+        "their", "then", "than", "also", "issue", "bug", "fix", "error",
+    }
+    issue_terms: set[str] = set()
     if brief is not None:
-        issue_text = " ".join([
-            brief.title, brief.body, brief.repository, *brief.labels
-        ]).lower()
-        issue_terms = set(re.findall(r"[a-z0-9]{3,}", issue_text))
+        issue_text = " ".join([brief.title, brief.body, brief.repository, *brief.labels]).lower()
+        issue_terms = {
+            term for term in re.findall(r"[a-z0-9_]{3,}", issue_text)
+            if term not in stop_words
+        }
 
-        def relevance(path: Path) -> tuple[int, str]:
-            path_terms = set(re.findall(
-                r"[a-z0-9]{3,}", path.relative_to(root).as_posix().lower()
-            ))
-            return (-len(issue_terms & path_terms), path.as_posix().lower())
-
-        paths.sort(key=relevance)
-    else:
-        paths.sort()
-
-    for path in paths:
+    candidates: list[tuple[int, str, str]] = []
+    for path in root.rglob("*"):
         if path.is_symlink() or not path.is_file():
             continue
         relative = path.relative_to(root)
@@ -123,8 +120,30 @@ def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = No
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if "\x00" in text:
+        if "\\x00" in text:
             continue
+
+        relative_name = relative.as_posix()
+        score = 0
+        if issue_terms:
+            path_terms = set(re.findall(r"[a-z0-9_]{3,}", relative_name.lower()))
+            content_lower = text.lower()
+            content_terms = set(re.findall(r"[a-z0-9_]{3,}", content_lower))
+            path_hits = issue_terms & path_terms
+            content_hits = issue_terms & content_terms
+            score += len(path_hits) * 5
+            score += len(content_hits) * 3
+            score += sum(min(content_lower.count(term), 3) for term in content_hits)
+            # Keep directly relevant tests alongside implementation files, even when
+            # the test filename itself says little about the issue.
+            if relative_name.startswith(("test/", "tests/")) and content_hits:
+                score += 2
+        candidates.append((score, relative_name, text))
+
+    candidates.sort(key=lambda item: (-item[0], item[1].lower()))
+    result: list[dict[str, str]] = []
+    total_bytes = 0
+    for _, relative_name, text in candidates:
         remaining = MAX_CONTEXT_BYTES - total_bytes
         if remaining <= 0 or len(result) >= MAX_CONTEXT_FILES:
             break
@@ -132,7 +151,7 @@ def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = No
         if len(encoded) > remaining:
             text = encoded[:remaining].decode("utf-8", errors="ignore")
             encoded = text.encode("utf-8")
-        result.append({"path": relative.as_posix(), "content": text})
+        result.append({"path": relative_name, "content": text})
         total_bytes += len(encoded)
     return result
 
