@@ -138,14 +138,14 @@ def main() -> int:
         except (GitHubIssueError, PatchError) as exc:
             print(f"ERROR: {exc}")
             return 2
-        if args.diff_output and proposal.diff:
+        if args.diff_output and proposal.status == "patch":
             try:
                 Path(args.diff_output).write_text(proposal.diff, encoding="utf-8")
             except OSError as exc:
                 print(f"ERROR: could not save patch: {exc}")
                 return 2
         print(json.dumps(proposal.to_dict(), ensure_ascii=False, indent=2))
-        return 0 if proposal.diff else 3
+        return 0 if proposal.status == "patch" else 3
 
     if args.command == "patch" and args.patch_command == "apply":
         try:

@@ -60,6 +60,7 @@ def test_draft_patch_returns_validated_diff_without_writing_files(monkeypatch, t
     response = {
         "message": {
             "content": json.dumps({
+                "status": "patch",
                 "summary": "Update retry handling.",
                 "diff": DIFF,
                 "assumptions": ["The existing client is the intended target."],
@@ -90,6 +91,7 @@ def test_draft_patch_rejects_sensitive_file_targets(monkeypatch, tmp_path):
     response = {
         "message": {
             "content": json.dumps({
+                "status": "patch",
                 "summary": "Unsafe change.",
                 "diff": bad_diff,
                 "assumptions": [],
@@ -115,3 +117,130 @@ def test_context_prioritizes_paths_related_to_issue(tmp_path):
     context = collect_repo_context(tmp_path, brief=ISSUE)
 
     assert context[0]["path"] == "retry.py"
+
+def test_context_prioritizes_relevant_file_contents(tmp_path):
+    for index in range(65):
+        (tmp_path / f"a_unrelated_{index:02}.py").write_text(
+            "unrelated_value = True", encoding="utf-8"
+        )
+
+    (tmp_path / "z_relevant.py").write_text(
+        "The retry backoff implementation handles the API response.",
+        encoding="utf-8",
+    )
+
+    context = collect_repo_context(tmp_path, brief=ISSUE)
+
+    assert context[0]["path"] == "z_relevant.py"
+
+
+def test_draft_patch_returns_needs_information_without_diff(monkeypatch, tmp_path):
+    (tmp_path / "client.py").write_text("before\n", encoding="utf-8")
+    response = {
+        "message": {
+            "content": json.dumps({
+                "status": "needs_information",
+                "summary": "More information is needed.",
+                "diff": "",
+                "assumptions": [],
+                "questions": ["What retry backoff behavior is expected?"],
+            })
+        }
+    }
+
+    class FakeOpener:
+        def open(self, request, timeout):
+            return FakeResponse(response)
+
+    monkeypatch.setattr("ai_worker.developer.build_opener", lambda handler: FakeOpener())
+
+    proposal = draft_patch(ISSUE, tmp_path)
+
+    assert proposal.status == "needs_information"
+    assert proposal.diff == ""
+    assert proposal.changed_files == []
+    assert proposal.questions == ["What retry backoff behavior is expected?"]
+
+
+def test_draft_patch_rejects_needs_information_with_diff():
+    import pytest
+    from ai_worker.developer import _validate_patch_response
+
+    with pytest.raises(PatchError):
+        _validate_patch_response({
+            "status": "needs_information",
+            "summary": "Invalid response.",
+            "diff": DIFF,
+            "assumptions": [],
+            "questions": ["What is missing?"],
+        })
+
+
+def test_draft_patch_fails_when_repair_response_is_invalid(monkeypatch, tmp_path):
+    import pytest
+
+    (tmp_path / "main.py").write_text("print('hello')", encoding="utf-8")
+    bad_diff = DIFF.replace("client.py", ".env")
+
+    def make_response(diff):
+        return {
+            "message": {
+                "content": json.dumps({
+                    "status": "patch",
+                    "summary": "Unsafe patch.",
+                    "diff": diff,
+                    "assumptions": [],
+                    "questions": [],
+                })
+            }
+        }
+
+    responses = [make_response(bad_diff), make_response(bad_diff)]
+
+    class FakeOpener:
+        def __init__(self):
+            self.calls = 0
+
+        def open(self, request, timeout):
+            response = responses[self.calls]
+            self.calls += 1
+            return FakeResponse(response)
+
+    opener = FakeOpener()
+    monkeypatch.setattr("ai_worker.developer.build_opener", lambda handler: opener)
+
+    with pytest.raises(PatchError):
+        draft_patch(ISSUE, tmp_path)
+
+    assert opener.calls == 2
+
+
+def test_draft_patch_repairs_invalid_json_response(monkeypatch, tmp_path):
+    import pytest
+
+    (tmp_path / "client.py").write_text("before\n", encoding="utf-8")
+
+    responses = [
+        {"message": {"content": "not valid JSON"}},
+        {"message": {"content": "still not valid JSON"}},
+    ]
+
+    class FakeOpener:
+        def __init__(self):
+            self.calls = 0
+
+        def open(self, request, timeout):
+            response = responses[self.calls]
+            self.calls += 1
+            return FakeResponse(response)
+
+    opener = FakeOpener()
+    monkeypatch.setattr(
+        "ai_worker.developer.build_opener",
+        lambda handler: opener,
+    )
+
+    with pytest.raises(PatchError):
+        draft_patch(ISSUE, tmp_path)
+
+    assert opener.calls == 2

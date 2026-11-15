@@ -78,7 +78,7 @@ def test_cli_patch_draft_uses_local_developer(monkeypatch, capsys, tmp_path):
         captured["brief"] = brief
         captured["workspace"] = workspace_arg
         captured["model"] = model
-        return SimpleNamespace(diff="diff --git a/x b/x", to_dict=lambda: {"summary": "Draft ready"})
+        return SimpleNamespace(status="patch", diff="diff --git a/x b/x", to_dict=lambda: {"summary": "Draft ready"})
 
     monkeypatch.setattr(cli, "draft_patch", fake_draft)
     monkeypatch.setattr(
