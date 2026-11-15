@@ -86,17 +86,17 @@ def test_context_prioritizes_relevant_file_contents(tmp_path):
     (tmp_path / "tests").mkdir()
     (tmp_path / "docs").mkdir()
     (tmp_path / "src" / "auth.py").write_text(
-        "class HTTPDigestAuth:\\n    def build_digest_header(self, qop):\\n        return qop\\n",
+        "class HTTPDigestAuth:\n    def build_digest_header(self, qop):\n        return qop\n",
         encoding="utf-8",
     )
     (tmp_path / "tests" / "test_requests.py").write_text(
-        "def test_digest_qop():\\n"
-        "    auth = HTTPDigestAuth('user', 'pass')\\n"
-        "    assert auth.build_digest_header('auth')\\n",
+        "def test_digest_qop():\n"
+        "    auth = HTTPDigestAuth('user', 'pass')\n"
+        "    assert auth.build_digest_header('auth')\n",
         encoding="utf-8",
     )
     (tmp_path / "docs" / "unrelated.rst").write_text(
-        "General installation and usage documentation.\\n",
+        "General installation and usage documentation.\n",
         encoding="utf-8",
     )
     brief = SimpleNamespace(
