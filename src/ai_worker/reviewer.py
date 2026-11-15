@@ -162,7 +162,7 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
     new_line: int | None = None
     patterns = (
         (
-            re.compile(r"(?<![\\w.])(?:eval|exec)\\s*\\("),
+            re.compile(r"(?<![\w.])(?:eval|exec)\s*\("),
             "critical",
             "Dynamic code execution",
             "Added code calls eval()/exec(), which can execute attacker-controlled Python code.",
@@ -179,7 +179,7 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
             new_line = None
             continue
         if diff_line.startswith("@@ "):
-            match = re.search(r"\\+(\\d+)(?:,(\\d+))?", diff_line)
+            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
             if not match:
                 raise ReviewerError("Patch contains an invalid unified-diff hunk header")
             new_line = int(match.group(1))
