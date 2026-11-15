@@ -394,6 +394,16 @@ def _hunk_dynamic_execution_lines(
             merged_modules.update(state_modules)
         return merged_calls, merged_modules
 
+    def invalidate_target(
+        target: ast.expr, calls: set[str], modules: set[str]
+    ) -> None:
+        if isinstance(target, ast.Name):
+            calls.discard(target.id)
+            modules.discard(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for element in target.elts:
+                invalidate_target(element, calls, modules)
+
     def scan_block(
         statements: list[ast.stmt], calls: set[str], modules: set[str]
     ) -> tuple[set[str], set[str]]:
@@ -409,9 +419,14 @@ def _hunk_dynamic_execution_lines(
             if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
                 if isinstance(statement, (ast.For, ast.AsyncFor)):
                     inspect_calls(statement.iter, calls, modules)
+                    body_calls, body_modules = set(calls), set(modules)
+                    invalidate_target(statement.target, body_calls, body_modules)
+                    body_state = scan_block(
+                        statement.body, body_calls, body_modules
+                    )
                 else:
                     inspect_calls(statement.test, calls, modules)
-                body_state = scan_block(statement.body, calls, modules)
+                    body_state = scan_block(statement.body, calls, modules)
                 else_state = scan_block(statement.orelse, *body_state)
                 # A loop may execute zero times, so retain incoming aliases too.
                 calls, modules = merge_states(
@@ -420,9 +435,16 @@ def _hunk_dynamic_execution_lines(
                 continue
 
             if isinstance(statement, (ast.With, ast.AsyncWith)):
+                body_calls, body_modules = set(calls), set(modules)
                 for item in statement.items:
                     inspect_calls(item.context_expr, calls, modules)
-                body_state = scan_block(statement.body, calls, modules)
+                    if item.optional_vars is not None:
+                        invalidate_target(
+                            item.optional_vars, body_calls, body_modules
+                        )
+                body_state = scan_block(
+                    statement.body, body_calls, body_modules
+                )
                 calls, modules = merge_states((calls, modules), body_state)
                 continue
 
