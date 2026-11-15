@@ -138,3 +138,9 @@ def test_accept_executable_bit_change_with_content_hunk():
 def test_validate_source_lines_that_look_like_file_headers():
     patch = VALID_DIFF.replace("-before", "--- this is source text").replace("+after", "+++ this is new source text")
     assert validate_patch_text(patch) == ["hello.txt"]
+
+
+def test_reject_submodule_index_mode():
+    patch = VALID_DIFF.replace("100644", "160000")
+    with pytest.raises(PatchError, match="Submodule changes"):
+        validate_patch_text(patch)
