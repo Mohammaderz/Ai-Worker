@@ -963,3 +963,47 @@ def test_ast_security_scanner_does_not_treat_global_declaration_as_rebinding():
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
     assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_respects_comprehension_target_shadowing():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++results = [eval(value) for eval in safe_functions]
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_eval_in_comprehension_iterable():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++results = [value for value in eval(source)]
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
+
+
+def test_ast_security_scanner_detects_eval_in_comprehension_filter():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++results = [value for value in values if eval(value)]
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
+
+
+def test_ast_security_scanner_respects_nested_comprehension_targets():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++results = [eval for row in rows for eval in row]
+"""
+    assert _detect_static_security_findings(diff) == []

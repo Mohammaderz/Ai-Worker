@@ -403,6 +403,65 @@ def _hunk_dynamic_execution_lines(
             def visit_ClassDef(self, child: ast.ClassDef) -> None:
                 return
 
+            def _target_names(self, target: ast.expr) -> set[str]:
+                if isinstance(target, ast.Name):
+                    return {target.id}
+                if isinstance(target, (ast.Tuple, ast.List)):
+                    names: set[str] = set()
+                    for element in target.elts:
+                        names.update(self._target_names(element))
+                    return names
+                return set()
+
+            def _visit_comprehension(self, child: ast.AST) -> None:
+                generators = child.generators  # type: ignore[attr-defined]
+                if not generators:
+                    return
+                # The first iterable is evaluated in the enclosing scope.
+                self.visit(generators[0].iter)
+                comprehension_shadowed = set(shadowed)
+                comprehension_shadowed.update(
+                    self._target_names(generators[0].target)
+                )
+                for condition in generators[0].ifs:
+                    inspect_calls(
+                        condition, calls, modules, comprehension_shadowed
+                    )
+                for generator in generators[1:]:
+                    inspect_calls(
+                        generator.iter, calls, modules, comprehension_shadowed
+                    )
+                    comprehension_shadowed.update(
+                        self._target_names(generator.target)
+                    )
+                    for condition in generator.ifs:
+                        inspect_calls(
+                            condition, calls, modules, comprehension_shadowed
+                        )
+                if isinstance(child, ast.DictComp):
+                    inspect_calls(
+                        child.key, calls, modules, comprehension_shadowed
+                    )
+                    inspect_calls(
+                        child.value, calls, modules, comprehension_shadowed
+                    )
+                else:
+                    inspect_calls(
+                        child.elt, calls, modules, comprehension_shadowed
+                    )
+
+            def visit_ListComp(self, child: ast.ListComp) -> None:
+                self._visit_comprehension(child)
+
+            def visit_SetComp(self, child: ast.SetComp) -> None:
+                self._visit_comprehension(child)
+
+            def visit_GeneratorExp(self, child: ast.GeneratorExp) -> None:
+                self._visit_comprehension(child)
+
+            def visit_DictComp(self, child: ast.DictComp) -> None:
+                self._visit_comprehension(child)
+
             def visit_Lambda(self, child: ast.Lambda) -> None:
                 lambda_names = {
                     argument.arg
