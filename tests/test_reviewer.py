@@ -1039,3 +1039,38 @@ def test_ast_security_scanner_respects_walrus_binding_in_comprehension_filter():
 +result = [value for value in values if ((eval := safe_callable) and eval(value))]
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_propagates_walrus_from_first_comprehension_iterable():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++results = [eval(value) for value in (eval := safe_values)]
++"""
++    assert _detect_static_security_findings(diff) == []
++
++
++def test_ast_security_scanner_propagates_walrus_between_comprehension_filters():
++    diff = """diff --git a/sample.py b/sample.py
++--- a/sample.py
+++++ b/sample.py
++@@ -0,0 +1,1 @@
+++results = [value for value in values if (eval := safe_callable) if eval(value)]
++"""
++    assert _detect_static_security_findings(diff) == []
++
++
++def test_ast_security_scanner_does_not_leak_comprehension_targets():
++    diff = """diff --git a/sample.py b/sample.py
++--- a/sample.py
+++++ b/sample.py
++@@ -0,0 +1,2 @@
+++results = [value for eval in safe_functions]
+++eval(user_input)
++"""
++    findings = _detect_static_security_findings(diff)
++    assert len(findings) == 1
++    assert findings[0]["line"] == 2
++
