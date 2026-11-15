@@ -130,6 +130,6 @@ The generated patch is only a proposal. Review it and run the project's own test
 ## Scheduled opportunity scans
 After this PR is merged into the default branch, a read-only GitHub Actions workflow will scan every six hours and upload a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.
 
-Daily $3-$5 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
+There is no verified daily-income estimate yet. The first commercial milestone is a payment actually received; listed rewards and escrowed amounts are opportunities, not income.
 
 See docs/ARCHITECTURE.md and sandbox/README.md.
