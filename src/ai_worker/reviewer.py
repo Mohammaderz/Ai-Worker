@@ -183,16 +183,51 @@ def _line_has_dynamic_execution(source: str) -> bool:
     return False
 
 
-def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]) -> set[int]:
-    """Return 1-based hunk line indexes where added AST calls begin."""
+def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
+    """Parse a reconstructed diff hunk as a function body."""
     if not source_lines:
-        return set()
+        return None
     wrapped = "async def _review_hunk():\n" + textwrap.indent(
         textwrap.dedent("\n".join(source_lines)), "    "
     ) + "\n"
     try:
-        tree = ast.parse(wrapped)
+        return ast.parse(wrapped)
     except SyntaxError:
+        return None
+
+
+def _hunk_dynamic_execution_aliases(
+    source_lines: list[str],
+) -> tuple[set[str], set[str]]:
+    """Collect imported eval/exec aliases visible in a reconstructed hunk."""
+    tree = _parse_security_hunk(source_lines)
+    call_aliases: set[str] = set()
+    module_aliases: set[str] = {"builtins", "__builtins__"}
+    if tree is None:
+        return call_aliases, module_aliases
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "builtins":
+            for item in node.names:
+                if item.name in {"eval", "exec"}:
+                    call_aliases.add(item.asname or item.name)
+        elif isinstance(node, ast.Import):
+            for item in node.names:
+                if item.name == "builtins":
+                    module_aliases.add(item.asname or "builtins")
+    return call_aliases, module_aliases
+
+
+def _hunk_dynamic_execution_lines(
+    source_lines: list[str],
+    added_lines: set[int],
+    imported_call_aliases: set[str] | None = None,
+    imported_module_aliases: set[str] | None = None,
+) -> set[int]:
+    """Return added hunk line indexes that call dynamic execution functions."""
+    if not source_lines:
+        return set()
+    tree = _parse_security_hunk(source_lines)
+    if tree is None:
         # Incomplete diff hunks are common; retain conservative per-line detection.
         return {
             index
@@ -200,18 +235,25 @@ def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]
             if _line_has_dynamic_execution(source_lines[index - 1])
         }
 
+    call_aliases = set(imported_call_aliases or ())
+    module_aliases = {"builtins", "__builtins__"} | set(imported_module_aliases or ())
+    local_calls, local_modules = _hunk_dynamic_execution_aliases(source_lines)
+    call_aliases.update(local_calls)
+    module_aliases.update(local_modules)
+
     detected: set[int] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         function = node.func
         dangerous = (
-            isinstance(function, ast.Name) and function.id in {"eval", "exec"}
+            isinstance(function, ast.Name)
+            and function.id in ({"eval", "exec"} | call_aliases)
         ) or (
             isinstance(function, ast.Attribute)
             and function.attr in {"eval", "exec"}
             and isinstance(function.value, ast.Name)
-            and function.value.id in {"builtins", "__builtins__"}
+            and function.value.id in module_aliases
         )
         # The wrapper occupies line 1; AST line numbers map to hunk lines by -1.
         hunk_line = node.lineno - 1
@@ -221,31 +263,61 @@ def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]
 
 
 def _detect_static_security_findings(diff: str) -> list[dict]:
-    """Detect direct dynamic-execution calls in added Python source, including multiline calls."""
+    """Detect direct and imported-alias dynamic execution in added Python hunks."""
     findings: list[dict] = []
     current_file: str | None = None
     new_line: int | None = None
     source_lines: list[str] = []
     source_line_numbers: list[int] = []
     added_hunk_lines: set[int] = set()
+    file_hunks: list[tuple[list[str], list[int], set[int]]] = []
 
     def flush_hunk() -> None:
         if current_file is None or not current_file.endswith(".py"):
             return
-        detected = _hunk_dynamic_execution_lines(source_lines, added_hunk_lines)
-        for hunk_index in sorted(detected):
-            findings.append({
-                "severity": "critical",
-                "file": current_file,
-                "line": source_line_numbers[hunk_index - 1],
-                "title": "Dynamic code execution",
-                "evidence": "Added Python code calls eval()/exec(), which can execute attacker-controlled code.",
-                "recommendation": "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
-            })
+        if source_lines:
+            file_hunks.append((source_lines, source_line_numbers, added_hunk_lines))
+
+    def flush_file() -> None:
+        if current_file is None or not current_file.endswith(".py"):
+            file_hunks.clear()
+            return
+        # Resolve import aliases across all visible hunks in this file before
+        # checking calls, so the import and call need not share one hunk.
+        call_aliases: set[str] = set()
+        module_aliases: set[str] = {"builtins", "__builtins__"}
+        for lines, _, _ in file_hunks:
+            calls, modules = _hunk_dynamic_execution_aliases(lines)
+            call_aliases.update(calls)
+            module_aliases.update(modules)
+        for lines, line_numbers, added in file_hunks:
+            detected = _hunk_dynamic_execution_lines(
+                lines, added, call_aliases, module_aliases
+            )
+            for hunk_index in sorted(detected):
+                findings.append({
+                    "severity": "critical",
+                    "file": current_file,
+                    "line": line_numbers[hunk_index - 1],
+                    "title": "Dynamic code execution",
+                    "evidence": "Added Python code calls eval()/exec(), which can execute attacker-controlled code.",
+                    "recommendation": "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
+                })
+        file_hunks.clear()
 
     for diff_line in diff.splitlines():
+        if diff_line.startswith("diff --git "):
+            flush_hunk()
+            flush_file()
+            current_file = None
+            new_line = None
+            source_lines = []
+            source_line_numbers = []
+            added_hunk_lines = set()
+            continue
         if diff_line.startswith("+++ "):
             flush_hunk()
+            flush_file()
             target = diff_line[4:].strip()
             current_file = target[2:] if target.startswith("b/") else target
             if current_file == "/dev/null":
@@ -278,6 +350,7 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
             new_line += 1
         # Deleted lines are excluded from the reconstructed new-side hunk.
     flush_hunk()
+    flush_file()
     return findings
 
 
