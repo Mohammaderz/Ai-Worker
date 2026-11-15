@@ -201,21 +201,51 @@ def _collect_dynamic_execution_aliases(
             and value.value.id in module_aliases
         )
 
+    def bound_names(target: ast.expr) -> set[str]:
+        if isinstance(target, ast.Name):
+            return {target.id}
+        if isinstance(target, (ast.Tuple, ast.List)):
+            names: set[str] = set()
+            for element in target.elts:
+                names.update(bound_names(element))
+            return names
+        return set()
+
     for node in sorted(statements, key=lambda item: (item.lineno, item.col_offset)):
-        if isinstance(node, ast.ImportFrom) and node.module == "builtins":
+        if isinstance(node, ast.ImportFrom):
             for item in node.names:
-                if item.name in {"eval", "exec"}:
-                    call_aliases.add(item.asname or item.name)
+                local_name = item.asname or item.name
+                call_aliases.discard(local_name)
+                if node.module == "builtins" and item.name in {"eval", "exec"}:
+                    call_aliases.add(local_name)
         elif isinstance(node, ast.Import):
             for item in node.names:
+                local_name = item.asname or item.name.split(".")[0]
+                module_aliases.discard(local_name)
                 if item.name == "builtins":
-                    module_aliases.add(item.asname or "builtins")
-        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
-            if dangerous_callable(node.value):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                for target in targets:
-                    if isinstance(target, ast.Name):
-                        call_aliases.add(target.id)
+                    module_aliases.add(local_name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value = node.value
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            dangerous = value is not None and dangerous_callable(value)
+            for target in targets:
+                for name in bound_names(target):
+                    call_aliases.discard(name)
+                    module_aliases.discard(name)
+                    if dangerous:
+                        call_aliases.add(name)
+        elif isinstance(node, ast.AugAssign):
+            for name in bound_names(node.target):
+                call_aliases.discard(name)
+                module_aliases.discard(name)
+        elif isinstance(node, ast.Delete):
+            for target in node.targets:
+                for name in bound_names(target):
+                    call_aliases.discard(name)
+                    module_aliases.discard(name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            call_aliases.discard(node.name)
+            module_aliases.discard(node.name)
     return call_aliases, module_aliases
 
 
