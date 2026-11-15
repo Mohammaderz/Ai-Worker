@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
+from ai_worker.reviewer import ReviewerError, review_patch
 from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, MAX_OUTPUT_BYTES, SandboxError, run_in_sandbox
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
@@ -41,6 +42,9 @@ class PipelineResult:
     tests_log: str
     node_static_exit_code: int | None
     node_static_log: str
+    reviewer_verdict: str
+    reviewer_summary: str
+    reviewer_findings: list[dict]
     message: str
 
     def to_dict(self) -> dict:
@@ -111,6 +115,7 @@ def run_pipeline(
     reward_amount: float | None = None,
     currency: str = "",
     timeout: int = 600,
+    reviewer_model: str | None = None,
 ) -> PipelineResult:
     """Inspect, clone, plan, draft, apply and test; stop before external submission."""
     if not isinstance(timeout, int) or not 30 <= timeout <= 1800:
@@ -158,9 +163,38 @@ def run_pipeline(
         if proposal.status == "patch":
             (output_dir / "proposal.patch").write_text(proposal.diff, encoding="utf-8")
 
+        reviewer_verdict = "not_run"
+        reviewer_summary = "No patch was available for review."
+        reviewer_findings: list[dict] = []
+        reviewer_error = ""
+        if proposal.status == "patch":
+            try:
+                review = review_patch(brief, str(workspace), proposal.diff, model=reviewer_model, timeout=min(timeout, 900))
+                reviewer_verdict = review.verdict
+                reviewer_summary = review.summary
+                reviewer_findings = [{"severity": item.severity, "file": item.file, "line": item.line, "title": item.title, "evidence": item.evidence, "recommendation": item.recommendation} for item in review.findings]
+                _write_json(output_dir / "review.json", review.to_dict())
+            except ReviewerError as exc:
+                reviewer_verdict = "unavailable"
+                reviewer_summary = "Independent review could not be completed."
+                reviewer_error = str(exc)
+                _write_json(output_dir / "review.json", {"verdict": "unavailable", "summary": reviewer_summary, "error": reviewer_error, "findings": []})
+
         node_static_code = None
         node_static_log = ""
-        if proposal.status == "needs_information":
+        if reviewer_verdict == "unavailable":
+            status = "reviewer_unavailable_blocked"
+            message = "Independent review was unavailable or invalid; fail-closed policy prevented patch application. " + reviewer_error
+            compile_code = tests_code = None
+            tests_detected = False
+            compile_log = tests_log = ""
+        elif reviewer_verdict in {"needs_changes", "blocked"}:
+            status = "review_blocked"
+            message = "Independent reviewer found unresolved issues; patch was not applied. " + reviewer_summary
+            compile_code = tests_code = None
+            tests_detected = False
+            compile_log = tests_log = ""
+        elif proposal.status == "needs_information":
             status = "needs_human_clarification"
             message = "The model did not produce a safe diff. Review the plan and questions; no patch was applied."
             compile_code = tests_code = None
@@ -277,6 +311,9 @@ def run_pipeline(
             tests_log=tests_log,
             node_static_exit_code=node_static_code,
             node_static_log=node_static_log,
+            reviewer_verdict=reviewer_verdict,
+            reviewer_summary=reviewer_summary,
+            reviewer_findings=reviewer_findings,
             message=message,
         )
         _write_json(output_dir / "pipeline-result.json", result.to_dict())
@@ -329,7 +366,9 @@ def run_pipeline(
                 "model": proposal.model,
                 "patch_schema": "patch-schema-v1",
                 "policy_version": "2026-11-15",
-                "reviewer_stage": "not_implemented",
+                "reviewer_stage": reviewer_verdict,
+                "reviewer_model": reviewer_model or model or "qwen2.5-coder:7b",
+                "reviewer_findings": reviewer_findings,
             },
             "execution": {
                 "python_image": image,
