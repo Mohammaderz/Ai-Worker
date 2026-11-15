@@ -9,6 +9,16 @@ AI-Worker has a useful and differentiated starting point: it combines opportunit
 
 The main risk is trying to become a multi-agent platform before the single-task workflow is demonstrably reliable. The product should feel simple to operate while keeping its internal pipeline observable, bounded, reproducible, and safe.
 
+## Implementation update on this branch
+
+The following review recommendations have now been implemented in code:
+- Patch validation checks unified-diff hunk line counts and rejects quoted Git paths explicitly until a safe path decoder exists.
+- Regression tests cover new/deleted files, multiple file sections, malformed hunk counts, quoted paths, executable-bit changes, and source lines that resemble diff headers.
+- Each completed pipeline run writes a versioned `run-manifest.json` with source revision, issue/patch hashes, model and policy identifiers, risk assessment, sandbox settings, check outcomes, and the human-approval boundary.
+- Sandbox stdout/stderr capture is bounded to 1 MiB combined; only a bounded tail is retained, and over-limit runs are stopped.
+
+The following remain deliberately unimplemented and must not be described as existing capabilities: a genuinely independent reviewer, persistent resumable task-state transitions, calibrated expected-net-value scoring, dependency-aware JavaScript/TypeScript tests, immutable final image-ID enforcement, and per-run disk/file quotas. The Docker runner is still a local development baseline, not a production multi-tenant isolation boundary.
+
 ## Independent critical findings
 
 ### P0 — establish a trustworthy task lifecycle
@@ -20,7 +30,7 @@ The main risk is trying to become a multi-agent platform before the single-task 
 
 ### P0 — make validation independent of the generator
 
-1. Keep strict patch parsing and Git's `git apply --check`; add tests for new files, deleted files, multiple files, quoted paths, malformed hunk counts, mode changes, and truncated output.
+1. Keep strict patch parsing and Git's `git apply --check`; add tests for new files, deleted files, multiple files, explicitly rejected quoted paths, malformed hunk counts, mode changes, and truncated output.
 2. Add a separate reviewer stage that receives the issue, acceptance criteria, original diff, and test results. It must return structured findings with severity, file/line, evidence, and a concrete verification step.
 3. The reviewer must not be allowed to approve a change merely because the developer model says it is correct. Prefer a different model/configuration where available; otherwise use deterministic checks and label the review as non-independent.
 4. Bound repair loops (for example, at most two repair attempts), preserve every attempt, and stop on repeated failure or scope expansion.
