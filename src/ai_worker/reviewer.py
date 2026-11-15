@@ -81,7 +81,7 @@ def _validate_review(data: object) -> dict:
     if not isinstance(data, dict) or set(data) != {"verdict", "summary", "findings"}:
         raise ReviewerError("Reviewer response does not match the required fields")
     verdict, summary, findings = data["verdict"], data["summary"], data["findings"]
-    if verdict not in {"pass", "needs_changes", "blocked"}:
+    if not isinstance(verdict, str) or verdict not in {"pass", "needs_changes", "blocked"}:
         raise ReviewerError("Reviewer verdict is invalid")
     if not isinstance(summary, str) or not summary.strip() or len(summary) > 3000:
         raise ReviewerError("Reviewer summary is missing or too long")
@@ -92,7 +92,7 @@ def _validate_review(data: object) -> dict:
         required = {"severity", "file", "line", "title", "evidence", "recommendation"}
         if not isinstance(finding, dict) or set(finding) != required:
             raise ReviewerError("Reviewer finding has an invalid structure")
-        if finding["severity"] not in {"critical", "high", "medium", "low"}:
+        if not isinstance(finding["severity"], str) or finding["severity"] not in {"critical", "high", "medium", "low"}:
             raise ReviewerError("Reviewer finding severity is invalid")
         if not isinstance(finding["file"], str) or not finding["file"] or len(finding["file"]) > 500:
             raise ReviewerError("Reviewer finding file is invalid")
