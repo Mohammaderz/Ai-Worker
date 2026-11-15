@@ -171,7 +171,7 @@ def run_pipeline(
         effective_reviewer_model = reviewer_model or os.getenv("AI_WORKER_REVIEWER_MODEL") or DEFAULT_REVIEWER_MODEL
         if proposal.status == "patch":
             try:
-                if effective_reviewer_model == (model or "qwen2.5-coder:7b"):
+                if effective_reviewer_model == proposal.model:
                     raise ReviewerError("Reviewer model must differ from the patch generator model")
                 review = review_patch(brief, str(workspace), proposal.diff, model=effective_reviewer_model, timeout=min(timeout, 900))
                 reviewer_verdict = review.verdict
