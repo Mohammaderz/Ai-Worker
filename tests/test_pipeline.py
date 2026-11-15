@@ -378,6 +378,10 @@ def test_pipeline_blocks_patch_when_reviewer_finds_critical_issue(monkeypatch, t
     assert result.status == "review_blocked"
     assert result.reviewer_verdict == "blocked"
     assert result.reviewer_findings[0]["severity"] == "critical"
+    report = (Path(result.output_dir) / "REPORT.md").read_text()
+    assert "Independent review findings" in report
+    assert "a.py:1" in report
+    assert "Sensitive data is exposed." in report
 
 
 def test_pipeline_rejects_same_generator_and_reviewer_model(monkeypatch, tmp_path):
