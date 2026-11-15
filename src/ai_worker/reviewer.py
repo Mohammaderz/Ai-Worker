@@ -386,7 +386,13 @@ def _hunk_dynamic_execution_lines(
     )
     detected: set[int] = set()
 
-    def inspect_calls(node: ast.AST, calls: set[str], modules: set[str]) -> None:
+    def inspect_calls(
+        node: ast.AST,
+        calls: set[str],
+        modules: set[str],
+        shadowed_names: set[str] | None = None,
+    ) -> None:
+        shadowed = shadowed_names or set()
         class CallVisitor(ast.NodeVisitor):
             def visit_FunctionDef(self, child: ast.FunctionDef) -> None:
                 return
@@ -404,7 +410,7 @@ def _hunk_dynamic_execution_lines(
                 function = child.func
                 dangerous = (
                     isinstance(function, ast.Name)
-                    and function.id in ({"eval", "exec"} | calls)
+                    and function.id in ({"eval", "exec"} - shadowed | calls)
                 ) or (
                     isinstance(function, ast.Attribute)
                     and function.attr in {"eval", "exec"}
@@ -489,6 +495,7 @@ def _hunk_dynamic_execution_lines(
         calls: set[str],
         modules: set[str],
         class_globals: tuple[set[str], set[str]] | None = None,
+        shadowed_names: set[str] | None = None,
     ) -> tuple[set[str], set[str]]:
         calls, modules = set(calls), set(modules)
         for statement in sorted(statements, key=lambda item: (item.lineno, item.col_offset)):
@@ -520,7 +527,13 @@ def _hunk_dynamic_execution_lines(
                 )
                 function_calls = set(inherited_calls) - local_names
                 function_modules = set(inherited_modules) - local_names
-                scan_block(statement.body, function_calls, function_modules)
+                function_shadowed = set(shadowed_names or ()) | local_names
+                scan_block(
+                    statement.body,
+                    function_calls,
+                    function_modules,
+                    shadowed_names=function_shadowed,
+                )
                 continue
 
             if isinstance(statement, ast.ClassDef):
@@ -536,8 +549,12 @@ def _hunk_dynamic_execution_lines(
 
             if isinstance(statement, ast.If):
                 inspect_calls(statement.test, calls, modules)
-                body_state = scan_block(statement.body, calls, modules)
-                else_state = scan_block(statement.orelse, calls, modules)
+                body_state = scan_block(
+                    statement.body, calls, modules, shadowed_names=shadowed_names
+                )
+                else_state = scan_block(
+                    statement.orelse, calls, modules, shadowed_names=shadowed_names
+                )
                 calls, modules = merge_states(body_state, else_state)
                 continue
 
@@ -547,12 +564,18 @@ def _hunk_dynamic_execution_lines(
                     body_calls, body_modules = set(calls), set(modules)
                     invalidate_target(statement.target, body_calls, body_modules)
                     body_state = scan_block(
-                        statement.body, body_calls, body_modules
+                        statement.body, body_calls, body_modules,
+                        shadowed_names=shadowed_names,
                     )
                 else:
                     inspect_calls(statement.test, calls, modules)
-                    body_state = scan_block(statement.body, calls, modules)
-                else_state = scan_block(statement.orelse, *body_state)
+                    body_state = scan_block(
+                        statement.body, calls, modules,
+                        shadowed_names=shadowed_names,
+                    )
+                else_state = scan_block(
+                    statement.orelse, *body_state, shadowed_names=shadowed_names
+                )
                 # A loop may execute zero times, so retain incoming aliases too.
                 calls, modules = merge_states(
                     (calls, modules), body_state, else_state
@@ -568,7 +591,8 @@ def _hunk_dynamic_execution_lines(
                             item.optional_vars, body_calls, body_modules
                         )
                 body_state = scan_block(
-                    statement.body, body_calls, body_modules
+                    statement.body, body_calls, body_modules,
+                    shadowed_names=shadowed_names,
                 )
                 calls, modules = merge_states((calls, modules), body_state)
                 continue
@@ -577,13 +601,20 @@ def _hunk_dynamic_execution_lines(
                 body_state = scan_block(statement.body, calls, modules)
                 branch_states = [body_state]
                 branch_states.extend(
-                    scan_block(handler.body, calls, modules)
+                    scan_block(
+                        handler.body, calls, modules,
+                        shadowed_names=shadowed_names,
+                    )
                     for handler in statement.handlers
                 )
                 merged = merge_states((calls, modules), *branch_states)
-                else_state = scan_block(statement.orelse, *body_state)
+                else_state = scan_block(
+                    statement.orelse, *body_state, shadowed_names=shadowed_names
+                )
                 merged = merge_states(merged, else_state)
-                calls, modules = scan_block(statement.finalbody, *merged)
+                calls, modules = scan_block(
+                    statement.finalbody, *merged, shadowed_names=shadowed_names
+                )
                 continue
 
             if hasattr(ast, "Match") and isinstance(statement, ast.Match):
@@ -592,11 +623,13 @@ def _hunk_dynamic_execution_lines(
                 for case in statement.cases:
                     if case.guard is not None:
                         inspect_calls(case.guard, calls, modules)
-                    states.append(scan_block(case.body, calls, modules))
+                    states.append(scan_block(
+                        case.body, calls, modules, shadowed_names=shadowed_names
+                    ))
                 calls, modules = merge_states(*states)
                 continue
 
-            inspect_calls(statement, calls, modules)
+            inspect_calls(statement, calls, modules, shadowed_names)
             calls, modules = _collect_dynamic_execution_aliases(
                 [statement], calls, modules
             )
