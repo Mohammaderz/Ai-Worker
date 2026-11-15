@@ -183,7 +183,7 @@ def test_cli_pipeline_refreshes_and_resolves_jobbi_gig(monkeypatch, capsys, tmp_
         ["ai-worker", "pipeline", "--gig-id", "algora:task-42",
          "--db", str(tmp_path / "ledger.sqlite3"),
          "--scratch-root", str(tmp_path / "scratch"),
-         "--output-root", str(tmp_path / "proposals")],
+         "--output-root", str(tmp_path / "proposals"), "--reviewer-model", "review-coder"],
     )
 
     assert cli.main() == 0
@@ -191,4 +191,5 @@ def test_cli_pipeline_refreshes_and_resolves_jobbi_gig(monkeypatch, capsys, tmp_
     assert captured["url"] == fake_gig.url
     assert captured["kwargs"]["reward_amount"] == 25
     assert captured["kwargs"]["currency"] == "USD"
+    assert captured["kwargs"]["reviewer_model"] == "review-coder"
     assert "ready_for_human_review" in capsys.readouterr().out
