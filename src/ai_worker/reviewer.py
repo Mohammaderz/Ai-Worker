@@ -10,7 +10,6 @@ from urllib.request import Request, build_opener
 from ai_worker.developer import collect_repo_context
 from ai_worker.planner import (
     DEFAULT_HOST,
-    DEFAULT_MODEL,
     MAX_RESPONSE_BYTES,
     OllamaError,
     _NoRedirect,
