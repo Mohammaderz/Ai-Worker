@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import uuid
 from dataclasses import asdict, dataclass
@@ -367,7 +368,7 @@ def run_pipeline(
                 "patch_schema": "patch-schema-v1",
                 "policy_version": "2026-11-15",
                 "reviewer_stage": reviewer_verdict,
-                "reviewer_model": reviewer_model or model or "qwen2.5-coder:7b",
+                "reviewer_model": reviewer_model or os.getenv("AI_WORKER_REVIEWER_MODEL") or model or "qwen2.5-coder:7b",
                 "reviewer_findings": reviewer_findings,
             },
             "execution": {
