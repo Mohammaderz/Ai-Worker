@@ -4,6 +4,8 @@
 > Target branch: `reviewer/production-income-engine-roadmap`  
 > Scope: additive guidance and acceptance criteria. This document does not claim that the capabilities below already exist.
 
+> Latest PR audit and corrective changes: [docs/REVIEW-FINDINGS-2026-11-15.md](REVIEW-FINDINGS-2026-11-15.md). This report records verified PR states, fixes, CI results, and remaining work.
+
 ## 1. Product direction
 
 AI-Worker should not try to become a generic coding-agent clone. Its differentiated product is a **risk-aware, evidence-backed income engine for software work**:
