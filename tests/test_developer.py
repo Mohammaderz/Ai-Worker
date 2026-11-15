@@ -3,6 +3,7 @@ import pytest
 from ai_worker.developer import (
     PatchError,
     apply_patch_in_sandbox,
+    collect_repo_context,
     validate_patch_text,
 )
 from ai_worker.sandbox import SandboxResult
@@ -75,3 +76,39 @@ def test_failed_patch_check_never_applies(monkeypatch, tmp_path):
     assert not result.applied
     assert len(calls) == 1
     assert (workspace / ".ai-worker-generated.patch").exists()
+
+
+
+def test_context_prioritizes_relevant_file_contents(tmp_path):
+    from types import SimpleNamespace
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "src" / "auth.py").write_text(
+        "class HTTPDigestAuth:\\n    def build_digest_header(self, qop):\\n        return qop\\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tests" / "test_requests.py").write_text(
+        "def test_digest_qop():\\n"
+        "    auth = HTTPDigestAuth('user', 'pass')\\n"
+        "    assert auth.build_digest_header('auth')\\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs" / "unrelated.rst").write_text(
+        "General installation and usage documentation.\\n",
+        encoding="utf-8",
+    )
+    brief = SimpleNamespace(
+        title="HTTPDigestAuth qop selection",
+        body="build_digest_header must handle whitespace in qop values",
+        repository="psf/requests",
+        labels=["bug"],
+    )
+
+    context = collect_repo_context(tmp_path, brief=brief)
+    paths = [item["path"] for item in context]
+
+    assert paths.index("tests/test_requests.py") < paths.index("docs/unrelated.rst")
+    assert "src/auth.py" in paths
+    assert "tests/test_requests.py" in paths
