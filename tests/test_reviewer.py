@@ -1042,14 +1042,16 @@ def test_ast_security_scanner_respects_walrus_binding_in_comprehension_filter():
 
 
 
-def test_ast_security_scanner_propagates_walrus_from_first_comprehension_iterable():
+def test_ast_security_scanner_checks_first_comprehension_iterable_in_outer_scope():
     diff = """diff --git a/sample.py b/sample.py
 --- a/sample.py
 +++ b/sample.py
 @@ -0,0 +1,1 @@
-+results = [eval(value) for value in (eval := safe_values)]
++results = [value for eval in eval(source)]
 """
-    assert _detect_static_security_findings(diff) == []
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
 
 
 def test_ast_security_scanner_propagates_walrus_between_comprehension_filters():
