@@ -164,6 +164,7 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     assert manifest["checks"]["pytest"] == {"detected": True, "ran": True, "exit_code": 0}
     assert manifest["human_approval_required"] is True
     assert manifest["execution"]["external_actions"] == []
+    assert manifest["execution"]["max_output_bytes"] == 1_000_000
 
     manifest_path = Path(result.output_dir) / "run-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
