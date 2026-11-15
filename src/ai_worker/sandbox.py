@@ -163,7 +163,6 @@ def run_in_sandbox(
         stdout = _text(bytes(stdout_tail))
         stderr = _text(bytes(stderr_tail))
         if stop_reason is not None:
-            cleanup_errors = []
             for cleanup_argv in (
                 ["docker", "kill", container_name],
                 ["docker", "rm", "-f", container_name],
@@ -171,7 +170,6 @@ def run_in_sandbox(
                 try:
                     subprocess.run(cleanup_argv, capture_output=True, timeout=10, check=False)
                 except (OSError, subprocess.TimeoutExpired):
-                    cleanup_errors.append("container cleanup command failed")
             if stop_reason == "timeout":
                 stderr = (stderr + f"\\nSandbox timed out after {timeout_seconds}s.")[-MAX_OUTPUT_CHARS:]
                 return SandboxResult(124, stdout, stderr, timed_out=True)
