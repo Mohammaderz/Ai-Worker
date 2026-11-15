@@ -404,7 +404,24 @@ def _hunk_dynamic_execution_lines(
                 return
 
             def visit_Lambda(self, child: ast.Lambda) -> None:
-                return
+                lambda_names = {
+                    argument.arg
+                    for argument in (
+                        child.args.posonlyargs
+                        + child.args.args
+                        + child.args.kwonlyargs
+                    )
+                }
+                if child.args.vararg is not None:
+                    lambda_names.add(child.args.vararg.arg)
+                if child.args.kwarg is not None:
+                    lambda_names.add(child.args.kwarg.arg)
+                inspect_calls(
+                    child.body,
+                    calls,
+                    modules,
+                    shadowed | lambda_names,
+                )
 
             def visit_Call(self, child: ast.Call) -> None:
                 function = child.func
@@ -509,6 +526,21 @@ def _hunk_dynamic_execution_lines(
                         inspect_calls(expression, calls, modules)
                 if statement.returns is not None:
                     inspect_calls(statement.returns, calls, modules)
+                argument_annotations = [
+                    argument.annotation
+                    for argument in (
+                        statement.args.posonlyargs
+                        + statement.args.args
+                        + statement.args.kwonlyargs
+                    )
+                ]
+                if statement.args.vararg is not None:
+                    argument_annotations.append(statement.args.vararg.annotation)
+                if statement.args.kwarg is not None:
+                    argument_annotations.append(statement.args.kwarg.annotation)
+                for annotation in argument_annotations:
+                    if annotation is not None:
+                        inspect_calls(annotation, calls, modules)
                 local_names = local_binding_names(statement.body)
                 local_names.update(
                     argument.arg
@@ -598,7 +630,10 @@ def _hunk_dynamic_execution_lines(
                 continue
 
             if isinstance(statement, ast.Try):
-                body_state = scan_block(statement.body, calls, modules)
+                body_state = scan_block(
+                    statement.body, calls, modules,
+                    shadowed_names=shadowed_names,
+                )
                 branch_states = [body_state]
                 branch_states.extend(
                     scan_block(
