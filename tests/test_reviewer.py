@@ -859,3 +859,50 @@ def test_ast_security_scanner_does_not_use_class_attributes_as_method_globals():
 +        return run_code(value)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_detects_eval_inside_lambda_body():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++calculate = lambda value: eval(value)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
+
+
+def test_ast_security_scanner_does_not_flag_lambda_parameter_shadowing_eval():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++calculate = lambda eval: eval(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_eval_in_try_with_shadowed_parameter():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++def calculate(eval):
++    try:
++        return eval(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_eval_in_function_annotation():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++def calculate(value: eval(user_input)):
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
