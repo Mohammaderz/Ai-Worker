@@ -765,3 +765,97 @@ def test_ast_security_scanner_drops_alias_shadowed_by_with_target():
 +    run_code(user_input)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_detects_direct_eval_inside_nested_function():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++def calculate(value):
++    return eval(value)
++result = calculate(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
+
+
+def test_ast_security_scanner_detects_eval_alias_inside_function_scope():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++def calculate(value):
++    run_code = eval
++    return run_code(value)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_does_not_flag_eval_parameter_shadowing_builtin():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++def calculate(eval):
++    return eval(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_does_not_flag_function_local_eval_rebinding():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++def calculate(value):
++    eval = safe_function
++    return eval(value)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_does_not_leak_function_aliases_to_module_scope():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,4 @@
++def calculate(value):
++    run_code = eval
++    run_code(value)
++run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_inherits_module_aliases_inside_function_scope():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code = eval
++def calculate(value):
++    return run_code(value)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_does_not_use_class_attributes_as_method_globals():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,4 @@
++class Calculator:
++    run_code = safe_function
++    def calculate(self, value):
++        return run_code(value)
+"""
+    assert _detect_static_security_findings(diff) == []
