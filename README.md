@@ -39,6 +39,7 @@ docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
 ## Optional local AI model
 ~~~bash
 ollama pull qwen2.5-coder:7b
+ollama pull deepseek-coder:6.7b
 ollama serve
 ~~~
 
@@ -93,7 +94,7 @@ ai-worker patch apply --diff-file task.patch --workspace .ai-worker/sandboxes/ta
 ai-worker sandbox run --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes -- pytest -q
 ~~~
 
-The generated patch is only a proposal. Review it and run the project's own tests before considering any external submission.
+Every generated patch must first receive a structured independent review with severity, file, line, evidence, and recommendation. Critical/high findings block it; medium findings require changes; reviewer errors fail closed. The reviewer uses a separate model by default (`deepseek-coder:6.7b` versus the patch generator's `qwen2.5-coder:7b`); `AI_WORKER_REVIEWER_MODEL` or `--reviewer-model` can override it. The generated patch is still only a proposal. Review it and run the project's own tests before considering any external submission.
 
 ## Scheduled opportunity scans
 After this PR is merged into the default branch, a read-only GitHub Actions workflow will scan every six hours and upload a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.
