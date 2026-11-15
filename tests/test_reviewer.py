@@ -3,6 +3,7 @@ import json
 import pytest
 
 from ai_worker.reviewer import (
+    _detect_static_security_findings,
     ReviewerError,
     _detect_static_security_findings,
     _validate_finding_locations,
@@ -282,3 +283,34 @@ def test_ast_security_scanner_ignores_non_python_files():
 +eval(expression)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_detects_multiline_eval_call():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++    return eval(
++        expression
++    )
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["file"] == "sample.py"
+    assert findings[0]["line"] == 1
+    assert findings[0]["severity"] == "critical"
+
+
+def test_ast_security_scanner_detects_multiline_builtins_exec():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++    builtins.exec(
++        untrusted_source
++    )
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
