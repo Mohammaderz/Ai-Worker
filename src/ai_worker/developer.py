@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -17,6 +18,9 @@ MAX_PATCH_BYTES = 100_000
 MAX_PATCH_FILES = 25
 MAX_CONTEXT_BYTES = 120_000
 MAX_CONTEXT_FILES = 60
+MAX_CONTEXT_SCAN_ENTRIES = 20_000
+MAX_CONTEXT_SCAN_FILES = 2_000
+MAX_CONTEXT_SCAN_BYTES = 2_000_000
 BLOCKED_NAMES = {
     ".env", ".npmrc", ".netrc", ".pypirc", "id_rsa", "id_ed25519",
 }
@@ -83,7 +87,11 @@ class PatchApplyResult:
 
 
 def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = None) -> list[dict[str, str]]:
-    """Read safe text files and rank them by issue relevance in both paths and contents."""
+    """Read bounded repository context and rank files by issue relevance.
+
+    Traversal, candidate count, and bytes read are capped because repository
+    contents are untrusted. Directory and filename ordering is deterministic.
+    """
     root = Path(workspace).resolve(strict=True)
     if not root.is_dir():
         raise PatchError("Repository workspace must be a directory")
@@ -105,64 +113,92 @@ def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = No
         }
 
     candidates: list[tuple[int, str, str]] = []
+    entries_seen = 0
+    files_read = 0
+    bytes_read = 0
+    stop_scan = False
 
-    for path in root.rglob("*"):
-        if path.is_symlink() or not path.is_file():
-            continue
-        relative = path.relative_to(root)
-        if any(part in EXCLUDED_DIRS for part in relative.parts[:-1]):
-            continue
-        name = path.name.lower()
-        if (
-            name.startswith(".env")
-            or name in BLOCKED_NAMES
-            or name.startswith(("credentials", "secrets"))
-            or name.endswith((".pem", ".key", ".p12", ".pfx"))
-            or path.suffix.lower() not in ALLOWED_SUFFIXES
-            or path.stat().st_size > 20_000
-        ):
-            continue
-        try:
-            content = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if "\x00" in content:
-            continue
+    for current, dirs, filenames in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        dirs[:] = sorted(
+            directory for directory in dirs
+            if directory not in EXCLUDED_DIRS
+            and not (current_path / directory).is_symlink()
+        )
+        entries_seen += len(dirs)
+        if entries_seen >= MAX_CONTEXT_SCAN_ENTRIES:
+            break
 
-        relative_name = relative.as_posix()
-        path_terms = set(re.findall(r"[a-z0-9]{3,}", relative_name.lower()))
-        content_terms = set(re.findall(r"[a-z0-9]{3,}", content.lower()))
+        for filename in sorted(filenames, key=str.lower):
+            entries_seen += 1
+            if entries_seen > MAX_CONTEXT_SCAN_ENTRIES:
+                stop_scan = True
+                break
 
-        path_hits = issue_terms & path_terms
-        content_hits = issue_terms & content_terms
+            path = current_path / filename
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                relative = path.relative_to(root)
+                name = path.name.lower()
+                if (
+                    name.startswith(".env")
+                    or name in BLOCKED_NAMES
+                    or name.startswith(("credentials", "secrets"))
+                    or name.endswith((".pem", ".key", ".p12", ".pfx"))
+                    or path.suffix.lower() not in ALLOWED_SUFFIXES
+                ):
+                    continue
+                size = path.stat().st_size
+                if size > 20_000:
+                    continue
+                if files_read >= MAX_CONTEXT_SCAN_FILES:
+                    stop_scan = True
+                    break
+                if bytes_read + size > MAX_CONTEXT_SCAN_BYTES:
+                    continue
+                content = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
 
-        # Prefer explicit path matches, then files whose contents discuss the issue.
-        score = len(path_hits) * 5 + len(content_hits) * 3
-        if issue_terms:
-            score += sum(
-                min(content.lower().count(term), 3)
-                for term in content_hits
-            )
+            if "\x00" in content:
+                continue
 
-        candidates.append((score, relative_name, content))
+            encoded_size = len(content.encode("utf-8"))
+            if bytes_read + encoded_size > MAX_CONTEXT_SCAN_BYTES:
+                continue
+            bytes_read += encoded_size
+            files_read += 1
+
+            relative_name = relative.as_posix()
+            content_lower = content.lower()
+            path_terms = set(re.findall(r"[a-z0-9]{3,}", relative_name.lower()))
+            content_terms = set(re.findall(r"[a-z0-9]{3,}", content_lower))
+            path_hits = issue_terms & path_terms
+            content_hits = issue_terms & content_terms
+
+            score = len(path_hits) * 5 + len(content_hits) * 3
+            if issue_terms:
+                score += sum(min(content_lower.count(term), 3) for term in content_hits)
+            candidates.append((score, relative_name, content))
+
+        if stop_scan:
+            break
 
     candidates.sort(key=lambda item: (-item[0], item[1].lower()))
 
     result: list[dict[str, str]] = []
     total_bytes = 0
-
     for _, relative_name, content in candidates:
         if len(result) >= MAX_CONTEXT_FILES:
             break
         remaining = MAX_CONTEXT_BYTES - total_bytes
         if remaining <= 0:
             break
-
         encoded = content.encode("utf-8")
         if len(encoded) > remaining:
             content = encoded[:remaining].decode("utf-8", errors="ignore")
             encoded = content.encode("utf-8")
-
         result.append({"path": relative_name, "content": content})
         total_bytes += len(encoded)
 
