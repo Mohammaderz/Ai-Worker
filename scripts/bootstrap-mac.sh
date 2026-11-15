@@ -57,11 +57,11 @@ elif ! ollama list 2>/dev/null | grep -q 'qwen2.5-coder:7b'; then
 fi
 
 if ollama list >/dev/null 2>&1 && ! ollama list 2>/dev/null | grep -q 'deepseek-coder:6.7b'; then
-  printf '\\nThe independent reviewer model deepseek-coder:6.7b is not installed.\\n'
+  printf '\nThe independent reviewer model deepseek-coder:6.7b is not installed.\n'
   read -r -p "Download it now? This requires several GB of disk space. [y/N] " REVIEWER_ANSWER
   case "$REVIEWER_ANSWER" in
     y|Y|yes|YES) ollama pull deepseek-coder:6.7b ;;
-    *) printf 'Skipped reviewer model download. The pipeline will safely block patches until it is installed. Run later: ollama pull deepseek-coder:6.7b\\n' ;;
+    *) printf 'Skipped reviewer model download. The pipeline will safely block patches until it is installed. Run later: ollama pull deepseek-coder:6.7b\n' ;;
   esac
 fi
 
