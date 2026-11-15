@@ -27,13 +27,13 @@ The main risk is trying to become a multi-agent platform before the single-task 
 
 ### P0 — make sandbox claims precise
 
-The current Docker runner has useful controls (no network, read-only container root, dropped capabilities, resource limits, and a task-only writable mount). Documentation already acknowledges this is not a complete hostile-code boundary.
+The current Docker runner has useful controls (no network, read-only container root, dropped capabilities, CPU/memory/PID/time limits, a task-only writable mount, and a 1 MiB combined stdout/stderr ceiling with a bounded retained tail). Both Dockerfiles pin their base images by digest. This is still not a complete hostile-code boundary.
 
-Before processing valuable or hostile third-party repositories at scale:
-- Pin images by immutable digest, not only mutable tags.
-- Verify the Docker daemon/runtime assumptions and never mount the Docker socket, home directory, credentials, or host package caches.
-- Add disk, file-count, output, and wall-clock limits; CPU/memory/PID limits alone do not prevent disk exhaustion.
-- Treat the host Docker daemon as part of the trusted computing base. For commercial multi-tenant use, move execution to disposable VMs or a hardened remote runner.
+Remaining production blockers:
+- The final locally built image tags are mutable; resolve and record immutable local image IDs before each execution.
+- The task workspace is a writable host bind mount without a per-run disk quota or file-count ceiling. A hostile process can still exhaust the Docker Desktop VM or host storage.
+- Verify Docker daemon/runtime assumptions and never mount the Docker socket, home directory, credentials, or host package caches.
+- Treat the host Docker daemon as part of the trusted computing base. For commercial multi-tenant use, move execution to disposable VMs or a hardened remote runner with enforceable disk/file quotas.
 - Keep dependency acquisition separate from execution. Never run arbitrary install scripts or package lifecycle hooks with network access.
 
 ### P1 — improve task relevance and economics
