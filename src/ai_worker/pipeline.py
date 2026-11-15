@@ -330,6 +330,9 @@ def run_pipeline(
             f"- Repository: {brief.repository}",
             f"- Workspace: {workspace}",
             f"- Model: {proposal.model}",
+            f"- Independent reviewer model: {effective_reviewer_model}",
+            f"- Independent reviewer verdict: {reviewer_verdict}",
+            f"- Independent reviewer summary: {reviewer_summary}",
             f"- Listed reward: {reward_amount:g} {currency}" if reward_amount is not None else "- Listed reward: Not provided",
             f"- Estimated effort: {estimated_effort:g} hours",
             f"- Estimated gross/hour: ${estimated_gross_per_hour:g}" if estimated_gross_per_hour is not None else "- Estimated gross/hour: Not calculable",
@@ -350,6 +353,15 @@ def run_pipeline(
             "Review issue terms, ownership/licensing, acceptance criteria, changed files, test logs, and payout conditions before any external action.",
             "",
         ]
+        if reviewer_findings:
+            lines.extend(["## Independent review findings", ""])
+            for finding in reviewer_findings:
+                lines.extend([
+                    f"- **{finding['severity'].upper()}** — `{finding['file']}:{finding['line']}`: {finding['title']}",
+                    f"  - Evidence: {finding['evidence']}",
+                    f"  - Recommendation: {finding['recommendation']}",
+                ])
+            lines.append("")
         (output_dir / "REPORT.md").write_text("\n".join(lines), encoding="utf-8")
         finished_at = datetime.now(timezone.utc).isoformat()
         issue_snapshot = output_dir / "issue.json"
