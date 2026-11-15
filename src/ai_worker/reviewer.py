@@ -320,22 +320,16 @@ def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
 def _hunk_dynamic_execution_aliases(
     source_lines: list[str],
 ) -> tuple[set[str], set[str]]:
-    """Collect imported eval/exec aliases visible in a reconstructed hunk."""
+    """Collect the final sequential execution aliases in a reconstructed hunk."""
     tree = _parse_security_hunk(source_lines)
-    call_aliases: set[str] = set()
-    module_aliases: set[str] = {"builtins", "__builtins__"}
     if tree is None:
-        return call_aliases, module_aliases
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "builtins":
-            for item in node.names:
-                if item.name in {"eval", "exec"}:
-                    call_aliases.add(item.asname or item.name)
-        elif isinstance(node, ast.Import):
-            for item in node.names:
-                if item.name == "builtins":
-                    module_aliases.add(item.asname or "builtins")
-    return call_aliases, module_aliases
+        return set(), {"builtins", "__builtins__"}
+    wrapper_body = (
+        tree.body[0].body
+        if tree.body and isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef))
+        else []
+    )
+    return _collect_dynamic_execution_aliases(wrapper_body)
 
 
 def _hunk_dynamic_execution_lines(
