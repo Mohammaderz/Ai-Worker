@@ -503,3 +503,42 @@ def test_ast_security_scanner_ignores_assignment_to_ordinary_callable():
 +run_code(user_input)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_drops_eval_alias_after_safe_rebinding():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code = eval
++run_code = safe_function
++run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_drops_builtins_module_alias_after_rebinding():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++import builtins as core
++core = safe_module
++core.exec(untrusted_source)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_alias_after_safe_rebinding_then_eval():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code = safe_function
++run_code = eval
++run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
