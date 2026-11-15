@@ -100,4 +100,7 @@ After this PR is merged into the default branch, a read-only GitHub Actions work
 
 Daily $5-$10 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
 
+## Development roadmap
+See [docs/IMPLEMENTATION-ROADMAP-INCOME-ENGINE.md](docs/IMPLEMENTATION-ROADMAP-INCOME-ENGINE.md) for the prioritized implementation specification, acceptance criteria, safety gates, evaluation metrics, and instructions for reconciling open PRs #5–#8 without duplicate work.
+
 See docs/ARCHITECTURE.md and sandbox/README.md.
