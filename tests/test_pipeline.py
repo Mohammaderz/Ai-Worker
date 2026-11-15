@@ -277,3 +277,52 @@ def test_pipeline_runs_node_syntax_check_in_node_sandbox(monkeypatch, tmp_path):
     assert captured["command"] == [
         "esbuild", "src/index.ts", "--outdir=/tmp/ai-worker-check"
     ]
+
+
+
+def test_pipeline_fails_closed_when_independent_reviewer_is_unavailable(monkeypatch, tmp_path):
+    from ai_worker.reviewer import ReviewerError
+
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["Acceptance verified"],
+            estimated_effort_hours=2.0, to_dict=lambda: {"risk_level": "low"},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="generator-model", status="patch", diff="diff --git a/a.py b/a.py",
+            changed_files=["a.py"], questions=[], to_dict=lambda: {"diff": "draft"},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "review_patch",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ReviewerError("review model unavailable")),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda *args, **kwargs: pytest.fail("patch must not be applied without a successful review"),
+    )
+
+    result = pipeline.run_pipeline(
+        brief().url,
+        scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals",
+    )
+
+    assert result.status == "reviewer_unavailable_blocked"
+    assert result.reviewer_verdict == "unavailable"
+    manifest = json.loads((Path(result.output_dir) / "run-manifest.json").read_text())
+    assert manifest["agent"]["reviewer_stage"] == "unavailable"
+    assert manifest["agent"]["reviewer_findings"] == []
+    review = json.loads((Path(result.output_dir) / "review.json").read_text())
+    assert review["verdict"] == "unavailable"
