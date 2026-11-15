@@ -163,7 +163,7 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
     for source, items in grouped.items():
         submitted = [r for r in items if r[4] is not None]
         accepted = [r for r in items if r[5] is not None]
-        paid = [r for r in items if r[1] == "paid"]
+        paid = [r for r in items if r[0] == "paid"]
         gross = sum(float(r[2] or 0) for r in paid)
         fees = sum(float(r[3] or 0) for r in paid)
         paid_hours = sum(float(r[1] or 0) for r in paid)
