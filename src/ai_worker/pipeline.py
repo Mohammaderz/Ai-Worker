@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
-from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, SandboxError, run_in_sandbox
+from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, MAX_OUTPUT_BYTES, SandboxError, run_in_sandbox
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
@@ -335,6 +335,7 @@ def run_pipeline(
                 "python_image": image,
                 "node_image": node_image,
                 "timeout_seconds": timeout,
+                "max_output_bytes": MAX_OUTPUT_BYTES,
                 "network_access": "disabled_in_task_containers",
                 "external_actions": [],
             },
