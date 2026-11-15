@@ -184,15 +184,24 @@ def _line_has_dynamic_execution(source: str) -> bool:
     return False
 
 
-def _module_dynamic_execution_aliases(source: str) -> tuple[set[str], set[str]]:
-    """Collect builtins execution aliases from a complete Python module."""
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return set(), {"builtins", "__builtins__"}
+def _collect_dynamic_execution_aliases(
+    statements: list[ast.stmt],
+) -> tuple[set[str], set[str]]:
+    """Collect straightforward, sequential imports and assignments of eval/exec."""
     call_aliases: set[str] = set()
     module_aliases: set[str] = {"builtins", "__builtins__"}
-    for node in ast.walk(tree):
+
+    def dangerous_callable(value: ast.expr) -> bool:
+        if isinstance(value, ast.Name):
+            return value.id in ({"eval", "exec"} | call_aliases)
+        return (
+            isinstance(value, ast.Attribute)
+            and value.attr in {"eval", "exec"}
+            and isinstance(value.value, ast.Name)
+            and value.value.id in module_aliases
+        )
+
+    for node in sorted(statements, key=lambda item: (item.lineno, item.col_offset)):
         if isinstance(node, ast.ImportFrom) and node.module == "builtins":
             for item in node.names:
                 if item.name in {"eval", "exec"}:
@@ -201,7 +210,22 @@ def _module_dynamic_execution_aliases(source: str) -> tuple[set[str], set[str]]:
             for item in node.names:
                 if item.name == "builtins":
                     module_aliases.add(item.asname or "builtins")
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            if dangerous_callable(node.value):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        call_aliases.add(target.id)
     return call_aliases, module_aliases
+
+
+def _module_dynamic_execution_aliases(source: str) -> tuple[set[str], set[str]]:
+    """Collect builtins execution aliases from a complete Python module."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set(), {"builtins", "__builtins__"}
+    return _collect_dynamic_execution_aliases(tree.body)
 
 
 def _read_changed_python_sources(workspace: str, diff: str) -> dict[str, str]:
@@ -304,7 +328,12 @@ def _hunk_dynamic_execution_lines(
 
     call_aliases = set(imported_call_aliases or ())
     module_aliases = {"builtins", "__builtins__"} | set(imported_module_aliases or ())
-    local_calls, local_modules = _hunk_dynamic_execution_aliases(source_lines)
+    wrapper_body = (
+        tree.body[0].body
+        if tree.body and isinstance(tree.body[0], (ast.FunctionDef, ast.AsyncFunctionDef))
+        else []
+    )
+    local_calls, local_modules = _collect_dynamic_execution_aliases(wrapper_body)
     call_aliases.update(local_calls)
     module_aliases.update(local_modules)
 

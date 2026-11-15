@@ -449,3 +449,57 @@ def test_read_changed_python_sources_rejects_symlink(tmp_path):
 """
     with pytest.raises(ReviewerError, match="symlink"):
         _read_changed_python_sources(str(tmp_path), diff)
+
+
+
+def test_ast_security_scanner_detects_eval_assignment_alias():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++run_code = eval
++result = run_code(user_input)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
+    assert findings[0]["severity"] == "critical"
+
+
+def test_ast_security_scanner_detects_builtins_exec_assignment_alias():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++import builtins as core
++execute = core.exec
++execute(untrusted_source)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_detects_assignment_alias_from_unchanged_source():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -19,0 +20,1 @@
++run_code(user_input)
+"""
+    findings = _detect_static_security_findings(
+        diff, {"sample.py": "run_code = eval\n"}
+    )
+    assert len(findings) == 1
+    assert findings[0]["line"] == 20
+
+
+def test_ast_security_scanner_ignores_assignment_to_ordinary_callable():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++run_code = safe_function
++run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
