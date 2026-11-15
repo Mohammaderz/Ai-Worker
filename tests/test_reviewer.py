@@ -2,7 +2,12 @@ import json
 
 import pytest
 
-from ai_worker.reviewer import ReviewerError, _validate_review, review_patch
+from ai_worker.reviewer import (
+    ReviewerError,
+    _validate_finding_locations,
+    _validate_review,
+    review_patch,
+)
 from ai_worker.sources.github_issue import ResearchBrief
 
 
@@ -142,3 +147,59 @@ def test_reviewer_rejects_malformed_unhashable_severity():
     }
     with pytest.raises(ReviewerError, match="severity is invalid"):
         _validate_review(data)
+
+
+
+def test_reviewer_finding_location_must_be_inside_new_side_hunk():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1,2 +1,2 @@
+ def calculate(expression):
+-    return 0
++    return eval(expression)
+"""
+    data = {
+        "findings": [{
+            "file": "sample.py",
+            "line": 2,
+        }]
+    }
+    _validate_finding_locations(data, diff)
+
+
+def test_reviewer_rejects_finding_line_outside_changed_hunk():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1,2 +1,2 @@
+ def calculate(expression):
+-    return 0
++    return eval(expression)
+"""
+    data = {
+        "findings": [{
+            "file": "sample.py",
+            "line": 3,
+        }]
+    }
+    with pytest.raises(ReviewerError, match="outside the changed hunks"):
+        _validate_finding_locations(data, diff)
+
+
+def test_reviewer_rejects_finding_for_file_not_in_patch():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -1 +1 @@
+-old()
++new()
+"""
+    data = {
+        "findings": [{
+            "file": "other.py",
+            "line": 1,
+        }]
+    }
+    with pytest.raises(ReviewerError, match="outside the patch"):
+        _validate_finding_locations(data, diff)
