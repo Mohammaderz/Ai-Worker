@@ -187,9 +187,9 @@ def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
     """Parse a reconstructed diff hunk as a function body."""
     if not source_lines:
         return None
-    wrapped = "async def _review_hunk():\\n" + textwrap.indent(
-        textwrap.dedent("\\n".join(source_lines)), "    "
-    ) + "\\n"
+    wrapped = "async def _review_hunk():\n" + textwrap.indent(
+        textwrap.dedent("\n".join(source_lines)), "    "
+    ) + "\n"
     try:
         return ast.parse(wrapped)
     except SyntaxError:
@@ -332,7 +332,7 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
             source_lines = []
             source_line_numbers = []
             added_hunk_lines = set()
-            match = re.search(r"\\+(\\d+)(?:,(\\d+))?", diff_line)
+            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
             if not match:
                 raise ReviewerError("Patch contains an invalid unified-diff hunk header")
             new_line = int(match.group(1))
