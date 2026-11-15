@@ -1056,7 +1056,7 @@ def test_ast_security_scanner_respects_function_local_shadowing_imported_builtin
     diff = """diff --git a/sample.py b/sample.py
 --- a/sample.py
 +++ b/sample.py
-@@ -0,0 +1,3 @@
+@@ -0,0 +1,4 @@
 +import builtins as runtime
 +def run():
 +    runtime = safe_module
