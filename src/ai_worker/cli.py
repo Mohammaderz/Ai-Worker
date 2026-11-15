@@ -58,6 +58,7 @@ def main() -> int:
     pipeline.add_argument("--image", default=DEFAULT_IMAGE)
     pipeline.add_argument("--node-image", default="ai-worker-sandbox:node22")
     pipeline.add_argument("--model")
+    pipeline.add_argument("--reviewer-model", help="Separate local Ollama model used for independent patch review")
     pipeline.add_argument("--timeout", type=int, default=600)
 
     ledger = sub.add_parser("ledger")
@@ -190,6 +191,7 @@ def main() -> int:
                 image=args.image,
                 node_image=args.node_image,
                 model=args.model,
+                reviewer_model=args.reviewer_model,
                 reward_amount=reward_amount,
                 currency=currency,
                 timeout=args.timeout,
