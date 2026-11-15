@@ -239,7 +239,7 @@ def validate_patch_text(diff: str) -> list[str]:
     """
     if not isinstance(diff, str) or not diff or len(diff.encode("utf-8")) > MAX_PATCH_BYTES:
         raise PatchError("Patch is empty or exceeds the 100 KiB limit")
-    if "\\x00" in diff or "GIT binary patch" in diff or "Binary files " in diff:
+    if "\x00" in diff or "GIT binary patch" in diff or "Binary files " in diff:
         raise PatchError("Binary or NUL-containing patches are not supported")
 
     paths: list[str] = []
@@ -281,7 +281,7 @@ def validate_patch_text(diff: str) -> list[str]:
         if line.startswith("--- "):
             if old_header_seen or hunk_seen:
                 raise PatchError("Patch contains a duplicate or misplaced --- header")
-            value = line[4:].split("\\t", 1)[0]
+            value = line[4:].split("\t", 1)[0]
             if value != "/dev/null":
                 if not value.startswith("a/") or _safe_patch_path(value[2:]) != current_path:
                     raise PatchError("Patch old-file header does not match its Git diff header")
@@ -289,7 +289,7 @@ def validate_patch_text(diff: str) -> list[str]:
         elif line.startswith("+++ "):
             if not old_header_seen or new_header_seen or hunk_seen:
                 raise PatchError("Patch contains a misplaced +++ header")
-            value = line[4:].split("\\t", 1)[0]
+            value = line[4:].split("\t", 1)[0]
             if value != "/dev/null":
                 if not value.startswith("b/") or _safe_patch_path(value[2:]) != current_path:
                     raise PatchError("Patch new-file header does not match its Git diff header")
@@ -297,14 +297,14 @@ def validate_patch_text(diff: str) -> list[str]:
         elif line.startswith("@@"):
             if not old_header_seen or not new_header_seen:
                 raise PatchError("Patch hunk appeared before both file headers")
-            if not re.match(r"^@@ -\\d+(?:,\\d+)? \\+\\d+(?:,\\d+)? @@", line):
+            if not re.match(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@", line):
                 raise PatchError("Patch contains a malformed unified diff hunk header")
             hunk_seen = True
         elif line in {"new file mode 120000", "old mode 120000", "new mode 120000"}:
             raise PatchError("Symlink changes are not allowed")
         elif line in {"new file mode 160000", "old mode 160000", "new mode 160000"}:
             raise PatchError("Submodule changes are not allowed")
-        elif re.fullmatch(r"index [0-9a-f]+\\.\\.[0-9a-f]+ 120000", line):
+        elif re.fullmatch(r"index [0-9a-f]+\.\.[0-9a-f]+ 120000", line):
             raise PatchError("Symlink changes are not allowed")
 
     finish_section()
