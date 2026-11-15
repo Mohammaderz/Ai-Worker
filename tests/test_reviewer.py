@@ -1039,3 +1039,40 @@ def test_ast_security_scanner_respects_walrus_binding_in_comprehension_filter():
 +result = [value for value in values if ((eval := safe_callable) and eval(value))]
 """
     assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_respects_function_parameter_shadowing_builtins_module():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++def run(builtins):
++    builtins.eval(source)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_respects_function_local_shadowing_imported_builtins_alias():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++import builtins as runtime
++def run():
++    runtime = safe_module
++    runtime.eval(source)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_still_detects_unshadowed_builtins_eval():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,2 @@
++import builtins as runtime
++runtime.eval(source)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 2
