@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
-from ai_worker.reviewer import ReviewerError, review_patch
+from ai_worker.reviewer import DEFAULT_REVIEWER_MODEL, ReviewerError, review_patch
 from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, MAX_OUTPUT_BYTES, SandboxError, run_in_sandbox
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
@@ -368,7 +368,7 @@ def run_pipeline(
                 "patch_schema": "patch-schema-v1",
                 "policy_version": "2026-11-15",
                 "reviewer_stage": reviewer_verdict,
-                "reviewer_model": reviewer_model or os.getenv("AI_WORKER_REVIEWER_MODEL") or model or "qwen2.5-coder:7b",
+                "reviewer_model": reviewer_model or os.getenv("AI_WORKER_REVIEWER_MODEL") or DEFAULT_REVIEWER_MODEL,
                 "reviewer_findings": reviewer_findings,
             },
             "execution": {
