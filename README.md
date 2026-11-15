@@ -45,7 +45,7 @@ ollama serve
 Keep Ollama running in that terminal. Run the following workflow commands in a second terminal. The model download uses disk space and the model's speed depends on your Mac's memory and hardware.
 
 ## One-command local task pipeline
-After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only low-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, REPORT.md and test logs.
+After a fresh scan, the pipeline can resolve a currently eligible Jobbi gig by ID or accept a canonical public GitHub issue URL. It inspects the issue, prepares a clean workspace, asks local Ollama for a plan and patch, applies only non-high-risk proposals without unresolved questions, and runs isolated checks. It writes a review package containing issue.json, plan.json, proposal.json, proposal.patch, pipeline-result.json, run-manifest.json, REPORT.md and test logs.
 
 ~~~bash
 # Refresh the feed and save eligible candidates
