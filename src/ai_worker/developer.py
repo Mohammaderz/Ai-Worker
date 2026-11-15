@@ -284,6 +284,26 @@ def validate_patch_text(diff: str) -> list[str]:
                 raise PatchError("Patch content appeared before a Git diff header")
             continue
 
+        # Within a hunk, ---/+++ are ordinary removed/added source lines.
+        # Only a new hunk header or file header ends the current hunk.
+        if in_hunk and not line.startswith("@@"):
+            if line.startswith("\\ No newline at end of file"):
+                continue
+            if not line:
+                raise PatchError("Patch contains an unprefixed blank line inside a hunk")
+            if line[0] == " ":
+                old_seen += 1
+                new_seen += 1
+            elif line[0] == "-":
+                old_seen += 1
+            elif line[0] == "+":
+                new_seen += 1
+            else:
+                raise PatchError("Patch contains an invalid unified diff hunk line")
+            if old_seen > old_expected or new_seen > new_expected:
+                raise PatchError("Patch hunk contains more lines than declared")
+            continue
+
         if line.startswith("--- "):
             finish_hunk()
             if old_header_seen or hunk_seen:
