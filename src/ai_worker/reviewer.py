@@ -200,18 +200,31 @@ def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]
             if _line_has_dynamic_execution(source_lines[index - 1])
         }
 
+    imported_call_aliases: set[str] = set()
+    imported_module_aliases: set[str] = {"builtins", "__builtins__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "builtins":
+            for item in node.names:
+                if item.name in {"eval", "exec"}:
+                    imported_call_aliases.add(item.asname or item.name)
+        elif isinstance(node, ast.Import):
+            for item in node.names:
+                if item.name == "builtins":
+                    imported_module_aliases.add(item.asname or "builtins")
+
     detected: set[int] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         function = node.func
         dangerous = (
-            isinstance(function, ast.Name) and function.id in {"eval", "exec"}
+            isinstance(function, ast.Name)
+            and function.id in ({"eval", "exec"} | imported_call_aliases)
         ) or (
             isinstance(function, ast.Attribute)
             and function.attr in {"eval", "exec"}
             and isinstance(function.value, ast.Name)
-            and function.value.id in {"builtins", "__builtins__"}
+            and function.value.id in imported_module_aliases
         )
         # The wrapper occupies line 1; AST line numbers map to hunk lines by -1.
         hunk_line = node.lineno - 1
