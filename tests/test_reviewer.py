@@ -740,3 +740,28 @@ def test_ast_security_scanner_keeps_safe_aliases_in_loop_body_unflagged():
 +    run_code(user_input)
 """
     assert _detect_static_security_findings(diff) == []
+
+
+
+def test_ast_security_scanner_drops_alias_shadowed_by_loop_target():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code = eval
++for run_code in safe_functions:
++    run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_drops_alias_shadowed_by_with_target():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++run_code = eval
++with manager as run_code:
++    run_code(user_input)
+"""
+    assert _detect_static_security_findings(diff) == []
