@@ -135,7 +135,7 @@ def _validate_finding_locations(data: dict, diff: str) -> None:
             elif current_file not in changed_ranges:
                 changed_ranges[current_file] = []
         elif current_file is not None and diff_line.startswith("@@ "):
-            match = re.search(r"\\+(\\d+)(?:,(\\d+))?", diff_line)
+            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
             if not match:
                 raise ReviewerError("Patch contains an invalid unified-diff hunk header")
             start = int(match.group(1))
