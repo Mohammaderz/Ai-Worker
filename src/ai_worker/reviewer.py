@@ -501,6 +501,7 @@ def _hunk_dynamic_execution_lines(
                     isinstance(function, ast.Attribute)
                     and function.attr in {"eval", "exec"}
                     and isinstance(function.value, ast.Name)
+                    and function.value.id not in self.shadowed
                     and function.value.id in ({"builtins", "__builtins__"} | modules)
                 )
                 hunk_line = child.lineno - 1
