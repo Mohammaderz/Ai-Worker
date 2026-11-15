@@ -239,18 +239,20 @@ This section supersedes earlier checkpoint SHAs and PR states above. The connect
 
 ### New reviewer/QA contract slice
 - A new feature branch `feat/reviewer-contract-qa-results` was created from the current PR #5 head `0df6b02765632c57fa7444f0185f01b1661b54bc`, so it preserves the PR #5 operator playbook and its code without duplicating work on `main`.
-- Added files in the pending branch commit:
+- Commit `8c8cc8bdd40f6a9d8d1a41494024defab8f0dc01` contains:
   - `src/ai_worker/reviewer.py`: strict versioned reviewer finding/result contract and bounded parser; critical/high findings prevent an approve decision.
   - `src/ai_worker/qa.py`: strict QA check/result contract with passed/failed/skipped/unavailable/not_run states and derived overall status.
   - `tests/test_reviewer_contract.py` and `tests/test_qa_results.py`: adversarial schema, path, status, numeric, and fail-closed checks.
   - `docs/REVIEWER-QA-CONTRACT.md`: scope and integration boundaries.
 - These modules are data contracts only. They do not call a reviewer model, execute commands, integrate into the task pipeline, or authorize any external submission. The independent reviewer is not yet operational.
-- CI status for this new commit is pending until the Actions run is queried. No local Mac tests were run; the connected environment does not expose the user's Mac.
+- Draft PR #10: https://github.com/Mohammaderz/AI-Worker/pull/10; base `feat/repository-intelligence-qa-profile`, head `feat/reviewer-contract-qa-results`, head SHA `8c8cc8bdd40f6a9d8d1a41494024defab8f0dc01`; open, draft, unmerged, mergeable at the latest check.
+- GitHub Actions run #405 (`43716893862`) completed successfully for that exact head: `pytest -q` reported **125 passed in 0.35s**; macOS bootstrap shell syntax, Python sandbox image build, Node sandbox image build, Node/TypeScript smoke, isolated execution smoke, and sandbox patch-application smoke all completed successfully.
+- No local Mac tests were run; the connected environment does not expose the user's Mac.
 - No tasks were claimed, no client was contacted, no third-party code was submitted, no PR was merged, and no payment was made or received.
 
 ### Next actions
-1. Verify the new feature branch commit and its GitHub Actions run; fix any failures and rerun only after inspecting logs.
-2. Open a **draft** PR stacked on PR #5, clearly documenting that dependency and that the reviewer is a contract only.
-3. After PR #5/#8 code is reconciled, integrate actual sandbox exit codes into QACheck and add an independent reviewer invocation with bounded time/retry/cost controls. Reviewer errors or inconclusive results must block.
+1. Keep PR #10 in draft while reviewing the contract and its fail-closed edge cases; do not merge it.
+2. After PR #5 is reviewed/merged and PR #8 is reconciled, retarget PR #10 to `main` only after verifying its dependency is satisfied.
+3. Integrate actual sandbox exit codes into QACheck and add a separate reviewer invocation with bounded time/retry/cost controls. Reviewer errors or inconclusive results must block.
 4. Add seeded vulnerable, incorrect, incomplete and out-of-scope patch fixtures; measure reviewer defect detection and false-positive rates before using it as a gate.
 5. Do not merge any PR or perform external marketplace/payment actions without the required explicit approval.
