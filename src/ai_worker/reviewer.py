@@ -182,22 +182,84 @@ def _line_has_dynamic_execution(source: str) -> bool:
     return False
 
 
+def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]) -> set[int]:
+    """Return 1-based hunk line indexes where added AST calls begin."""
+    if not source_lines:
+        return set()
+    wrapped = "async def _review_hunk():\\n" + "".join(
+        "    " + line + "\\n" for line in source_lines
+    )
+    try:
+        tree = ast.parse(wrapped)
+    except SyntaxError:
+        # Incomplete diff hunks are common; retain conservative per-line detection.
+        return {
+            index
+            for index in added_lines
+            if _line_has_dynamic_execution(source_lines[index - 1])
+        }
+
+    detected: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        dangerous = (
+            isinstance(function, ast.Name) and function.id in {"eval", "exec"}
+        ) or (
+            isinstance(function, ast.Attribute)
+            and function.attr in {"eval", "exec"}
+            and isinstance(function.value, ast.Name)
+            and function.value.id in {"builtins", "__builtins__"}
+        )
+        # The wrapper occupies line 1; AST line numbers map to hunk lines by -1.
+        hunk_line = node.lineno - 1
+        if dangerous and hunk_line in added_lines:
+            detected.add(hunk_line)
+    return detected
+
+
 def _detect_static_security_findings(diff: str) -> list[dict]:
-    """Detect direct dynamic-execution calls in added Python source lines."""
+    """Detect direct dynamic-execution calls in added Python source, including multiline calls."""
     findings: list[dict] = []
     current_file: str | None = None
     new_line: int | None = None
+    source_lines: list[str] = []
+    source_line_numbers: list[int] = []
+    added_hunk_lines: set[int] = set()
+
+    def flush_hunk() -> None:
+        if current_file is None or not current_file.endswith(".py"):
+            return
+        detected = _hunk_dynamic_execution_lines(source_lines, added_hunk_lines)
+        for hunk_index in sorted(detected):
+            findings.append({
+                "severity": "critical",
+                "file": current_file,
+                "line": source_line_numbers[hunk_index - 1],
+                "title": "Dynamic code execution",
+                "evidence": "Added Python code calls eval()/exec(), which can execute attacker-controlled code.",
+                "recommendation": "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
+            })
 
     for diff_line in diff.splitlines():
         if diff_line.startswith("+++ "):
+            flush_hunk()
             target = diff_line[4:].strip()
             current_file = target[2:] if target.startswith("b/") else target
             if current_file == "/dev/null":
                 current_file = None
             new_line = None
+            source_lines = []
+            source_line_numbers = []
+            added_hunk_lines = set()
             continue
         if diff_line.startswith("@@ "):
-            match = re.search(r"\+(\d+)(?:,(\d+))?", diff_line)
+            flush_hunk()
+            source_lines = []
+            source_line_numbers = []
+            added_hunk_lines = set()
+            match = re.search(r"\\+(\\d+)(?:,(\\d+))?", diff_line)
             if not match:
                 raise ReviewerError("Patch contains an invalid unified-diff hunk header")
             new_line = int(match.group(1))
@@ -205,20 +267,16 @@ def _detect_static_security_findings(diff: str) -> list[dict]:
         if current_file is None or new_line is None:
             continue
         if diff_line.startswith("+") and not diff_line.startswith("+++"):
-            source = diff_line[1:]
-            if current_file.endswith(".py") and _line_has_dynamic_execution(source):
-                findings.append({
-                    "severity": "critical",
-                    "file": current_file,
-                    "line": new_line,
-                    "title": "Dynamic code execution",
-                    "evidence": "Added Python code calls eval()/exec(), which can execute attacker-controlled code.",
-                    "recommendation": "Replace dynamic execution with a restricted parser or explicit allowlisted operations.",
-                })
+            source_lines.append(diff_line[1:])
+            source_line_numbers.append(new_line)
+            added_hunk_lines.add(len(source_lines))
             new_line += 1
         elif diff_line.startswith(" "):
+            source_lines.append(diff_line[1:])
+            source_line_numbers.append(new_line)
             new_line += 1
-
+        # Deleted lines are excluded from the reconstructed new-side hunk.
+    flush_hunk()
     return findings
 
 
