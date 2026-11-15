@@ -5,6 +5,7 @@ import ast
 import json
 import os
 import re
+import textwrap
 from dataclasses import asdict, dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener
@@ -186,9 +187,9 @@ def _hunk_dynamic_execution_lines(source_lines: list[str], added_lines: set[int]
     """Return 1-based hunk line indexes where added AST calls begin."""
     if not source_lines:
         return set()
-    wrapped = "async def _review_hunk():\n" + "".join(
-        "    " + line + "\n" for line in source_lines
-    )
+    wrapped = "async def _review_hunk():\n" + textwrap.indent(
+        textwrap.dedent("\n".join(source_lines)), "    "
+    ) + "\n"
     try:
         tree = ast.parse(wrapped)
     except SyntaxError:
