@@ -606,9 +606,13 @@ def _hunk_dynamic_execution_lines(
                     *statement.args.kw_defaults,
                 ]:
                     if expression is not None:
-                        inspect_calls(expression, calls, modules)
+                        inspect_calls(
+                            expression, calls, modules, shadowed_names
+                        )
                 if statement.returns is not None:
-                    inspect_calls(statement.returns, calls, modules)
+                    inspect_calls(
+                        statement.returns, calls, modules, shadowed_names
+                    )
                 argument_annotations = [
                     argument.annotation
                     for argument in (
@@ -623,7 +627,9 @@ def _hunk_dynamic_execution_lines(
                     argument_annotations.append(statement.args.kwarg.annotation)
                 for annotation in argument_annotations:
                     if annotation is not None:
-                        inspect_calls(annotation, calls, modules)
+                        inspect_calls(
+                            annotation, calls, modules, shadowed_names
+                        )
                 local_names, explicit_scope_rebindings = local_binding_names(
                     statement.body
                 )
