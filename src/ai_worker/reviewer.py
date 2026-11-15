@@ -18,7 +18,10 @@ from ai_worker.planner import (
 from ai_worker.sources.github_issue import ResearchBrief
 
 
-DEFAULT_REVIEWER_MODEL = "deepseek-coder:6.7b"\n\n\nclass ReviewerError(RuntimeError):
+DEFAULT_REVIEWER_MODEL = "deepseek-coder:6.7b"
+
+
+class ReviewerError(RuntimeError):
     """Raised when a trustworthy structured review cannot be obtained."""
 
 
