@@ -318,14 +318,34 @@ def _parse_security_hunk(source_lines: list[str]) -> ast.Module | None:
     """Parse a reconstructed diff hunk as a function body."""
     if not source_lines:
         return None
-    wrapped = "async def _review_hunk():\n" + textwrap.indent(
-        textwrap.dedent("\n".join(source_lines)), "    "
-    ) + "\n"
+    body = textwrap.dedent("\n".join(source_lines))
+    wrapped = "async def _review_hunk():\n" + textwrap.indent(body, "    ") + "\n"
     try:
         return ast.parse(wrapped)
     except SyntaxError:
+        # A diff hunk may omit an except/finally clause outside its boundaries.
+        # Add a synthetic handler only to the analysis copy, never source code.
+        try_lines = [
+            line for line in body.splitlines()
+            if re.match(r"^( *)try\s*:", line)
+        ]
+        for try_line in reversed(try_lines):
+            indent = len(try_line) - len(try_line.lstrip(" "))
+            prefix = " " * indent
+            repaired = (
+                body.rstrip()
+                + "\n"
+                + prefix + "except Exception:\n"
+                + prefix + "    pass\n"
+            )
+            candidate = "async def _review_hunk():\n" + textwrap.indent(
+                repaired, "    "
+            ) + "\n"
+            try:
+                return ast.parse(candidate)
+            except SyntaxError:
+                continue
         return None
-
 
 def _hunk_dynamic_execution_aliases(
     source_lines: list[str],
@@ -384,6 +404,26 @@ def _hunk_dynamic_execution_lines(
             if dangerous and hunk_line in added_lines:
                 detected.add(hunk_line)
 
+    def merge_states(
+        *states: tuple[set[str], set[str]],
+    ) -> tuple[set[str], set[str]]:
+        merged_calls: set[str] = set()
+        merged_modules: set[str] = set()
+        for state_calls, state_modules in states:
+            merged_calls.update(state_calls)
+            merged_modules.update(state_modules)
+        return merged_calls, merged_modules
+
+    def invalidate_target(
+        target: ast.expr, calls: set[str], modules: set[str]
+    ) -> None:
+        if isinstance(target, ast.Name):
+            calls.discard(target.id)
+            modules.discard(target.id)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for element in target.elts:
+                invalidate_target(element, calls, modules)
+
     def scan_block(
         statements: list[ast.stmt], calls: set[str], modules: set[str]
     ) -> tuple[set[str], set[str]]:
@@ -391,16 +431,64 @@ def _hunk_dynamic_execution_lines(
         for statement in sorted(statements, key=lambda item: (item.lineno, item.col_offset)):
             if isinstance(statement, ast.If):
                 inspect_calls(statement.test, calls, modules)
-                body_calls, body_modules = scan_block(
-                    statement.body, calls, modules
+                body_state = scan_block(statement.body, calls, modules)
+                else_state = scan_block(statement.orelse, calls, modules)
+                calls, modules = merge_states(body_state, else_state)
+                continue
+
+            if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
+                if isinstance(statement, (ast.For, ast.AsyncFor)):
+                    inspect_calls(statement.iter, calls, modules)
+                    body_calls, body_modules = set(calls), set(modules)
+                    invalidate_target(statement.target, body_calls, body_modules)
+                    body_state = scan_block(
+                        statement.body, body_calls, body_modules
+                    )
+                else:
+                    inspect_calls(statement.test, calls, modules)
+                    body_state = scan_block(statement.body, calls, modules)
+                else_state = scan_block(statement.orelse, *body_state)
+                # A loop may execute zero times, so retain incoming aliases too.
+                calls, modules = merge_states(
+                    (calls, modules), body_state, else_state
                 )
-                else_calls, else_modules = scan_block(
-                    statement.orelse, calls, modules
+                continue
+
+            if isinstance(statement, (ast.With, ast.AsyncWith)):
+                body_calls, body_modules = set(calls), set(modules)
+                for item in statement.items:
+                    inspect_calls(item.context_expr, calls, modules)
+                    if item.optional_vars is not None:
+                        invalidate_target(
+                            item.optional_vars, body_calls, body_modules
+                        )
+                body_state = scan_block(
+                    statement.body, body_calls, body_modules
                 )
-                # A name may be dangerous on either path; union is intentionally
-                # conservative after a branch whose runtime condition is unknown.
-                calls = body_calls | else_calls
-                modules = body_modules | else_modules
+                calls, modules = merge_states((calls, modules), body_state)
+                continue
+
+            if isinstance(statement, ast.Try):
+                body_state = scan_block(statement.body, calls, modules)
+                branch_states = [body_state]
+                branch_states.extend(
+                    scan_block(handler.body, calls, modules)
+                    for handler in statement.handlers
+                )
+                merged = merge_states((calls, modules), *branch_states)
+                else_state = scan_block(statement.orelse, *body_state)
+                merged = merge_states(merged, else_state)
+                calls, modules = scan_block(statement.finalbody, *merged)
+                continue
+
+            if hasattr(ast, "Match") and isinstance(statement, ast.Match):
+                inspect_calls(statement.subject, calls, modules)
+                states = [(calls, modules)]
+                for case in statement.cases:
+                    if case.guard is not None:
+                        inspect_calls(case.guard, calls, modules)
+                    states.append(scan_block(case.body, calls, modules))
+                calls, modules = merge_states(*states)
                 continue
 
             inspect_calls(statement, calls, modules)
