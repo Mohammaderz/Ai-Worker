@@ -1007,3 +1007,35 @@ def test_ast_security_scanner_respects_nested_comprehension_targets():
 +results = [eval for row in rows for eval in row]
 """
     assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_respects_walrus_binding_within_boolean_expression():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++result = ((eval := safe_callable) and eval(source))
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_detects_eval_before_walrus_rebinding():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++result = (eval(source) and (eval := safe_callable))
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 1
+
+
+def test_ast_security_scanner_respects_walrus_binding_in_comprehension_filter():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,1 @@
++result = [value for value in values if ((eval := safe_callable) and eval(value))]
+"""
+    assert _detect_static_security_findings(diff) == []

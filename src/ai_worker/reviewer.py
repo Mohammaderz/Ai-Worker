@@ -394,6 +394,9 @@ def _hunk_dynamic_execution_lines(
     ) -> None:
         shadowed = shadowed_names or set()
         class CallVisitor(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.shadowed = set(shadowed)
+
             def visit_FunctionDef(self, child: ast.FunctionDef) -> None:
                 return
 
@@ -479,14 +482,21 @@ def _hunk_dynamic_execution_lines(
                     child.body,
                     calls,
                     modules,
-                    shadowed | lambda_names,
+                    self.shadowed | lambda_names,
                 )
+
+            def visit_NamedExpr(self, child: ast.NamedExpr) -> None:
+                # The value is evaluated before the assignment-expression target
+                # becomes bound in the current expression scope.
+                self.visit(child.value)
+                if isinstance(child.target, ast.Name):
+                    self.shadowed.add(child.target.id)
 
             def visit_Call(self, child: ast.Call) -> None:
                 function = child.func
                 dangerous = (
                     isinstance(function, ast.Name)
-                    and function.id in ({"eval", "exec"} - shadowed | calls)
+                    and function.id in ({"eval", "exec"} - self.shadowed | calls)
                 ) or (
                     isinstance(function, ast.Attribute)
                     and function.attr in {"eval", "exec"}
