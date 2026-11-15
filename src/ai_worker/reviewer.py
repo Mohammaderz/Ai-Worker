@@ -441,7 +441,9 @@ def _hunk_dynamic_execution_lines(
 
         CallVisitor().visit(node)
 
-    def local_binding_names(statements: list[ast.stmt]) -> set[str]:
+    def local_binding_names(
+        statements: list[ast.stmt],
+    ) -> tuple[set[str], set[str]]:
         class BindingVisitor(ast.NodeVisitor):
             def __init__(self) -> None:
                 self.names: set[str] = set()
@@ -485,7 +487,10 @@ def _hunk_dynamic_execution_lines(
         visitor = BindingVisitor()
         for statement in statements:
             visitor.visit(statement)
-        return visitor.names - visitor.explicit_globals - visitor.explicit_nonlocals
+        local_names = visitor.names - visitor.explicit_globals - visitor.explicit_nonlocals
+        global_rebindings = visitor.names & visitor.explicit_globals
+        nonlocal_rebindings = visitor.names & visitor.explicit_nonlocals
+        return local_names, global_rebindings | nonlocal_rebindings
 
     def merge_states(
         *states: tuple[set[str], set[str]],
@@ -541,7 +546,9 @@ def _hunk_dynamic_execution_lines(
                 for annotation in argument_annotations:
                     if annotation is not None:
                         inspect_calls(annotation, calls, modules)
-                local_names = local_binding_names(statement.body)
+                local_names, explicit_scope_rebindings = local_binding_names(
+                    statement.body
+                )
                 local_names.update(
                     argument.arg
                     for argument in (
@@ -559,7 +566,11 @@ def _hunk_dynamic_execution_lines(
                 )
                 function_calls = set(inherited_calls) - local_names
                 function_modules = set(inherited_modules) - local_names
-                function_shadowed = set(shadowed_names or ()) | local_names
+                function_shadowed = (
+                    set(shadowed_names or ())
+                    | local_names
+                    | explicit_scope_rebindings
+                )
                 scan_block(
                     statement.body,
                     function_calls,

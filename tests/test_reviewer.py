@@ -907,3 +907,59 @@ def test_ast_security_scanner_detects_eval_in_function_annotation():
     findings = _detect_static_security_findings(diff)
     assert len(findings) == 1
     assert findings[0]["line"] == 1
+
+
+def test_ast_security_scanner_respects_global_eval_rebinding():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,4 @@
++def calculate(value):
++    global eval
++    eval = safe_function
++    return eval(value)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_still_detects_unrebound_global_eval():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++def calculate(value):
++    global eval
++    return eval(value)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
+
+
+def test_ast_security_scanner_respects_nonlocal_eval_from_outer_scope():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,6 @@
++def outer(safe_function):
++    eval = safe_function
++    def inner(value):
++        nonlocal eval
++        eval = safe_function
++        return eval(value)
+"""
+    assert _detect_static_security_findings(diff) == []
+
+
+def test_ast_security_scanner_does_not_treat_global_declaration_as_rebinding():
+    diff = """diff --git a/sample.py b/sample.py
+--- a/sample.py
++++ b/sample.py
+@@ -0,0 +1,3 @@
++def calculate(value):
++    global eval
++    return eval(value)
+"""
+    findings = _detect_static_security_findings(diff)
+    assert len(findings) == 1
+    assert findings[0]["line"] == 3
