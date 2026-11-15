@@ -126,7 +126,7 @@ def collect_repo_context(workspace: str | Path, brief: ResearchBrief | None = No
             content = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if "\\x00" in content:
+        if "\x00" in content:
             continue
 
         relative_name = relative.as_posix()
