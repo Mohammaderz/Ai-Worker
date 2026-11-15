@@ -19,7 +19,7 @@ from ai_worker.planner import (
 from ai_worker.sources.github_issue import ResearchBrief
 
 
-class ReviewerError(RuntimeError):
+DEFAULT_REVIEWER_MODEL = "deepseek-coder:6.7b"\n\n\nclass ReviewerError(RuntimeError):
     """Raised when a trustworthy structured review cannot be obtained."""
 
 
@@ -128,7 +128,7 @@ def review_patch(
     timeout: int = 300,
 ) -> ReviewResult:
     """Review a proposed diff against bounded source context; never modify files."""
-    model_name = model or os.getenv("AI_WORKER_REVIEWER_MODEL", DEFAULT_MODEL)
+    model_name = model or os.getenv("AI_WORKER_REVIEWER_MODEL", DEFAULT_REVIEWER_MODEL)
     endpoint = _validate_local_host(host or os.getenv("AI_WORKER_OLLAMA_URL", DEFAULT_HOST))
     if not model_name or len(model_name) > 128 or any(ch.isspace() for ch in model_name):
         raise ReviewerError("Invalid reviewer model name")
