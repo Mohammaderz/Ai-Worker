@@ -8,6 +8,20 @@ from ai_worker import pipeline
 from ai_worker.models import Gig
 from ai_worker.sources.github_issue import ResearchBrief
 
+SIMPLE_DIFF = """diff --git a/a.py b/a.py
+--- a/a.py
++++ b/a.py
+@@ -1 +1 @@
+-before
++after
+"""
+
+
+def _allow_preflight_only(diff, workspace, **kwargs):
+    if "ai-worker-verify-" in str(workspace):
+        return SimpleNamespace(applied=True, message="pre-review candidate verified")
+    pytest.fail("patch must not be applied to the task workspace")
+
 
 @pytest.fixture(autouse=True)
 def allow_pipeline_tests_to_stub_independent_review(monkeypatch):
@@ -65,6 +79,22 @@ def test_resolve_eligible_gig_rejects_missing_or_filtered_records():
         pipeline.resolve_eligible_gig("missing", [eligible_gig()])
     with pytest.raises(pipeline.PipelineError, match="safety filters"):
         pipeline.resolve_eligible_gig("algora:42", [eligible_gig(payment_state="promised")])
+
+
+def test_model_usage_summary_keeps_incomplete_token_totals_unknown():
+    summary = pipeline._model_usage_summary([
+        {"outcome": "accepted", "prompt_tokens": 10, "completion_tokens": 3},
+        {"outcome": "request_failed", "prompt_tokens": 5, "completion_tokens": None},
+    ])
+
+    assert summary["call_count"] == 2
+    assert summary["accepted_response_count"] == 1
+    assert summary["failed_or_rejected_response_count"] == 1
+    assert summary["calls_with_token_counts"] == 1
+    assert summary["prompt_tokens"] == 10
+    assert summary["completion_tokens"] == 3
+    assert summary["total_tokens"] == 13
+    assert summary["cost_usd"] is None
 
 
 def test_pipeline_stops_for_closed_issue(monkeypatch, tmp_path):
@@ -204,7 +234,7 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="local", status="patch", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
+            model="local", status="patch", diff=SIMPLE_DIFF, changed_files=["a.py"],
             questions=[], to_dict=lambda: {"diff": "draft"}
         ),
     )
@@ -235,6 +265,8 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     assert calls == [
         ["python", "-m", "compileall", "-q", "."],
         ["python", "-m", "pytest", "-q"],
+        ["python", "-m", "compileall", "-q", "."],
+        ["python", "-m", "pytest", "-q"],
     ]
     assert "did not claim the bounty" in (
         (tmp_path / "proposals" / Path(result.output_dir).name / "REPORT.md").read_text()
@@ -247,9 +279,19 @@ def test_pipeline_runs_compile_and_tests_in_sandbox(monkeypatch, tmp_path):
     assert manifest["agent"]["reviewer_stage"] == "pass"
     assert manifest["checks"]["python_compile"] == {"ran": True, "exit_code": 0}
     assert manifest["checks"]["pytest"] == {"detected": True, "ran": True, "exit_code": 0}
+    assert manifest["checks"]["pre_review_verification"]["passed"] is True
+    assert manifest["checks"]["final_verification"]["passed"] is True
     assert manifest["human_approval_required"] is True
     assert manifest["execution"]["external_actions"] == []
     assert manifest["execution"]["max_output_bytes"] == 1_000_000
+    assert manifest["model_routing"]["planning"]["provider"] == "ollama_loopback"
+    assert manifest["model_routing"]["review"]["provider"] == "ollama_loopback"
+    assert manifest["model_usage"]["summary"]["call_count"] == 0
+    assert manifest["model_usage"]["summary"]["cost_usd"] is None
+    assert manifest["model_usage"]["artifact"] == "model-usage.json"
+    assert manifest["escalation"]["performed"] is False
+    assert (Path(result.output_dir) / "model-routing.json").exists()
+    assert (Path(result.output_dir) / "model-usage.json").exists()
 
     manifest_path = Path(result.output_dir) / "run-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -281,7 +323,7 @@ def test_pipeline_holds_high_value_bounties_for_manual_verification(monkeypatch,
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="local", status="patch", diff="diff --git a/a.py b/a.py", changed_files=["a.py"],
+            model="local", status="patch", diff=SIMPLE_DIFF, changed_files=["a.py"],
             questions=[], to_dict=lambda: {"diff": "draft"}
         ),
     )
@@ -372,7 +414,7 @@ def test_pipeline_fails_closed_when_independent_reviewer_is_unavailable(monkeypa
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="generator-model", status="patch", diff="diff --git a/a.py b/a.py",
+            model="generator-model", status="patch", diff=SIMPLE_DIFF,
             changed_files=["a.py"], questions=[], to_dict=lambda: {"diff": "draft"},
         ),
     )
@@ -382,7 +424,7 @@ def test_pipeline_fails_closed_when_independent_reviewer_is_unavailable(monkeypa
     )
     monkeypatch.setattr(
         pipeline, "apply_patch_in_sandbox",
-        lambda *args, **kwargs: pytest.fail("patch must not be applied without a successful review"),
+        _allow_preflight_only,
     )
 
     result = pipeline.run_pipeline(
@@ -419,7 +461,7 @@ def test_pipeline_blocks_patch_when_reviewer_finds_critical_issue(monkeypatch, t
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="generator-model", status="patch", diff="diff --git a/a.py b/a.py",
+            model="generator-model", status="patch", diff=SIMPLE_DIFF,
             changed_files=["a.py"], questions=[], to_dict=lambda: {"diff": "draft"},
         ),
     )
@@ -442,7 +484,7 @@ def test_pipeline_blocks_patch_when_reviewer_finds_critical_issue(monkeypatch, t
     )
     monkeypatch.setattr(
         pipeline, "apply_patch_in_sandbox",
-        lambda *args, **kwargs: pytest.fail("critical review finding must block patch application"),
+        _allow_preflight_only,
     )
 
     result = pipeline.run_pipeline(
@@ -480,7 +522,7 @@ def test_pipeline_rejects_same_generator_and_reviewer_model(monkeypatch, tmp_pat
     monkeypatch.setattr(
         pipeline, "draft_patch",
         lambda *args, **kwargs: SimpleNamespace(
-            model="qwen2.5-coder:7b", status="patch", diff="diff --git a/a.py b/a.py",
+            model="qwen2.5-coder:7b", status="patch", diff=SIMPLE_DIFF,
             changed_files=["a.py"], questions=[], to_dict=lambda: {"diff": "draft"},
         ),
     )
@@ -743,7 +785,8 @@ def _configure_bounded_repair_pipeline(
     applied_diffs = []
 
     def fake_apply(diff, workspace, **kwargs):
-        applied_diffs.append(diff)
+        if "ai-worker-verify-" not in str(workspace):
+            applied_diffs.append(diff)
         return SimpleNamespace(
             applied=True,
             message="applied",
@@ -980,9 +1023,14 @@ def test_pipeline_stops_after_two_unsuccessful_repair_attempts(
 
     def fake_repair(*args, **kwargs):
         repair_calls.append(kwargs)
+        replacement = f"repair{len(repair_calls)}"
         return SimpleNamespace(
             status="patch",
-            diff=f"bounded-repair-candidate-{len(repair_calls)}",
+            diff=(
+                "diff --git a/client.py b/client.py\n"
+                "--- a/client.py\n+++ b/client.py\n"
+                "@@ -1 +1 @@\n-before\n+" + replacement + "\n"
+            ),
             changed_files=["client.py"],
             summary="Attempted a bounded correction.",
             questions=[],
@@ -1013,6 +1061,297 @@ def test_pipeline_stops_after_two_unsuccessful_repair_attempts(
         (Path(result.output_dir) / "repair-history.json").read_text()
     )
     assert len(history["attempts"]) == 2
+
+
+def test_failed_required_test_is_sent_to_bounded_repair_before_review(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        (workspace / "worker.py").write_text("def create_worker(options): return options\n")
+        (workspace / "tests").mkdir()
+        (workspace / "tests" / "test_worker.py").write_text("def test_existing(): assert True\n")
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    plan = SimpleNamespace(
+        risk_level="low", blockers=[], acceptance_checklist=["Existing behavior remains valid"],
+        estimated_effort_hours=1.0, to_dict=lambda: {"test_plan": ["pytest -q"]},
+    )
+    monkeypatch.setattr(pipeline, "plan_github_issue", lambda *args, **kwargs: plan)
+    initial_diff = """diff --git a/worker.py b/worker.py
+--- a/worker.py
++++ b/worker.py
+@@ -1 +1 @@
+-def create_worker(options): return options
++def create_worker(options): return options
+"""
+    repaired_diff = initial_diff.replace("return options", "return dict(options)")
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="generator-model", status="patch", diff=initial_diff,
+            changed_files=["worker.py"], questions=[], summary="initial",
+            to_dict=lambda: {"status": "patch", "diff": initial_diff},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda *args, **kwargs: SimpleNamespace(applied=True, message="applied in candidate"),
+    )
+
+    runs = []
+
+    def fake_run(workspace, command, **kwargs):
+        runs.append(command)
+        is_pytest = command[-2:] == ["pytest", "-q"]
+        failed = is_pytest and runs.count(command) == 1
+        return SimpleNamespace(
+            exit_code=1 if failed else 0,
+            stdout="FAILED test_timeout_zero" if failed else "checks passed",
+            stderr="",
+            timed_out=False,
+        )
+
+    monkeypatch.setattr(pipeline, "run_in_sandbox", fake_run)
+    repair_requests = []
+
+    def fake_repair(brief_arg, workspace, **kwargs):
+        repair_requests.append(kwargs)
+        return SimpleNamespace(
+            status="patch", diff=repaired_diff, changed_files=["worker.py"],
+            summary="repaired based on the failing pytest output", questions=[],
+        )
+
+    monkeypatch.setattr(pipeline, "repair_patch", fake_repair)
+    reviews = []
+
+    def fake_review(*args, **kwargs):
+        reviews.append(kwargs)
+        return _fake_review_result("pass", "Reviewer passed despite prior test failure.")
+
+    monkeypatch.setattr(pipeline, "review_patch", fake_review)
+
+    result = pipeline.run_pipeline(
+        brief().url,
+        scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals",
+        model="generator-model",
+        reviewer_model="reviewer-model",
+    )
+
+    assert result.status == "ready_for_human_review"
+    assert len(repair_requests) == 1
+    finding = repair_requests[0]["findings"][0]
+    assert finding["file"] == "worker.py"
+    assert "FAILED test_timeout_zero" in finding["evidence"]
+    assert repair_requests[0]["allowed_files"] == ["worker.py"]
+    assert reviews[0]["verification_evidence"]["passed"] is True
+    assert reviews[0]["task_plan"] == {"test_plan": ["pytest -q"]}
+    verification_attempts = reviews[0]["verification_evidence"]["attempts"]
+    assert any(
+        check["name"] == "pytest" and check["exit_code"] == 1
+        and "FAILED test_timeout_zero" in check["stdout"]
+        for attempt in verification_attempts for check in attempt["checks"]
+    )
+    assert any(
+        check["name"] == "pytest" and check["exit_code"] == 0
+        for attempt in verification_attempts for check in attempt["checks"]
+    )
+    manifest = json.loads((Path(result.output_dir) / "run-manifest.json").read_text())
+    assert manifest["checks"]["pre_review_verification"]["passed"] is True
+    assert manifest["checks"]["final_verification"]["passed"] is True
+
+
+def test_sandbox_patch_check_failure_becomes_bounded_repair_finding():
+    findings = pipeline._verification_findings(
+        {
+            "patch_applied": False,
+            "patch_error": "Patch failed git apply --check",
+            "patch_apply_stderr": "error: patch failed: tests/test_worker.py:9",
+            "checks": [],
+        },
+        ["src/worker.py", "tests/test_worker.py"],
+    )
+    assert len(findings) == 1
+    assert findings[0]["file"] == "src/worker.py"
+    assert findings[0]["title"] == "Candidate patch failed sandbox application"
+    assert "tests/test_worker.py:9" in findings[0]["evidence"]
+    assert "unchanged repository workspace" in findings[0]["recommendation"]
+
+
+def test_sandbox_patch_check_failure_is_repaired_before_review(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        (workspace / "a.py").write_text("before\n")
+        (workspace / "tests").mkdir()
+        (workspace / "tests" / "test_a.py").write_text("def test_ok(): assert True\n")
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["verify"],
+            estimated_effort_hours=1.0, to_dict=lambda: {"test_plan": ["pytest"]},
+        ),
+    )
+    initial = SIMPLE_DIFF
+    repaired = SIMPLE_DIFF.replace("+after", "+fixed")
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="generator-model", status="patch", diff=initial,
+            changed_files=["a.py"], questions=[], summary="initial",
+            to_dict=lambda: {"status": "patch", "diff": initial},
+        ),
+    )
+
+    apply_calls = []
+
+    def fake_apply(diff, workspace, **kwargs):
+        apply_calls.append((diff, workspace))
+        if len(apply_calls) == 1:
+            return SimpleNamespace(
+                applied=False, message="git apply --check failed",
+                stdout="", stderr="error: patch does not apply",
+            )
+        return SimpleNamespace(applied=True, message="applied in candidate")
+
+    monkeypatch.setattr(pipeline, "apply_patch_in_sandbox", fake_apply)
+    monkeypatch.setattr(
+        pipeline, "run_in_sandbox",
+        lambda *args, **kwargs: SimpleNamespace(
+            exit_code=0, stdout="checks passed", stderr="", timed_out=False,
+        ),
+    )
+    repair_calls = []
+
+    def fake_repair(*args, **kwargs):
+        repair_calls.append(kwargs)
+        return SimpleNamespace(
+            status="patch", diff=repaired, changed_files=["a.py"],
+            summary="repaired after exact sandbox diagnostic", questions=[],
+        )
+
+    monkeypatch.setattr(pipeline, "repair_patch", fake_repair)
+    review_calls = []
+    monkeypatch.setattr(
+        pipeline, "review_patch",
+        lambda *args, **kwargs: (
+            review_calls.append(kwargs)
+            or _fake_review_result("pass", "Reviewed the repaired candidate.")
+        ),
+    )
+
+    result = pipeline.run_pipeline(
+        brief().url, scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals", model="generator-model",
+        reviewer_model="reviewer-model",
+    )
+
+    assert result.status == "ready_for_human_review"
+    assert len(repair_calls) == 1
+    finding = repair_calls[0]["findings"][0]
+    assert finding["title"] == "Candidate patch failed sandbox application"
+    assert "patch does not apply" in finding["evidence"]
+    assert len(review_calls) == 1
+    assert review_calls[0]["verification_evidence"]["passed"] is True
+    first_attempt = review_calls[0]["verification_evidence"]["attempts"][0]
+    assert first_attempt["patch_applied"] is False
+    assert first_attempt["patch_apply_stderr"] == "error: patch does not apply"
+
+
+def test_incomplete_verification_cannot_be_overridden_by_reviewer_pass(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(pipeline, "inspect_github_issue", lambda url: brief())
+
+    def fake_clone(repository, workspace, **kwargs):
+        workspace.mkdir(parents=True)
+        (workspace / "worker.py").write_text("pass\n")
+        (workspace / "tests").mkdir()
+        (workspace / "tests" / "test_worker.py").write_text("def test_example(): assert True\n")
+        return SimpleNamespace(path=str(workspace))
+
+    monkeypatch.setattr(pipeline, "clone_public_github_repo", fake_clone)
+    monkeypatch.setattr(
+        pipeline, "plan_github_issue",
+        lambda *args, **kwargs: SimpleNamespace(
+            risk_level="low", blockers=[], acceptance_checklist=["verify"],
+            estimated_effort_hours=1.0, to_dict=lambda: {"test_plan": ["pytest"]},
+        ),
+    )
+    diff = initial_diff = """diff --git a/worker.py b/worker.py
+--- a/worker.py
++++ b/worker.py
+@@ -1 +1 @@
+-pass
++pass
+"""
+    monkeypatch.setattr(
+        pipeline, "draft_patch",
+        lambda *args, **kwargs: SimpleNamespace(
+            model="generator-model", status="patch", diff=diff,
+            changed_files=["worker.py"], questions=[], to_dict=lambda: {"diff": diff},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "run_in_sandbox",
+        lambda *args, **kwargs: SimpleNamespace(
+            exit_code=None, stdout="", stderr="", timed_out=True,
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "review_patch",
+        lambda *args, **kwargs: _fake_review_result("pass", "Misleading model pass."),
+    )
+    monkeypatch.setattr(
+        pipeline, "repair_patch",
+        lambda *args, **kwargs: pytest.fail("timeouts are incomplete verification, not repair findings"),
+    )
+    monkeypatch.setattr(
+        pipeline, "apply_patch_in_sandbox",
+        lambda diff, workspace, **kwargs: (
+            SimpleNamespace(applied=True, message="candidate")
+            if "ai-worker-verify-" in str(workspace)
+            else pytest.fail("incomplete verification must prevent task-workspace application")
+        ),
+    )
+
+    result = pipeline.run_pipeline(
+        brief().url, scratch_root=tmp_path / "scratch",
+        output_root=tmp_path / "proposals", model="generator-model",
+        reviewer_model="reviewer-model",
+    )
+    assert result.status == "verification_failed"
+    assert result.reviewer_verdict == "pass"
+    assert "cannot authorize patch application" in result.message
+
+
+@pytest.mark.parametrize(
+    "check",
+    [
+        {"required": True, "ran": False, "exit_code": None, "timed_out": False},
+        {"required": True, "ran": True, "exit_code": None, "timed_out": True},
+        {"required": True, "ran": True, "exit_code": 1, "timed_out": False},
+        {"required": True, "ran": True, "exit_code": False, "timed_out": False},
+    ],
+)
+def test_deterministic_gate_rejects_missing_failed_timeout_and_boolean_exit(check):
+    evidence = {"patch_applied": True, "checks": [check]}
+    assert pipeline._verification_gate(evidence) is False
+
+
+def test_deterministic_gate_requires_at_least_one_required_check():
+    assert pipeline._verification_gate({
+        "patch_applied": True,
+        "checks": [{"required": False, "ran": True, "exit_code": 0, "timed_out": False}],
+    }) is False
 
 
 def test_pipeline_records_node_project_without_installing_dependencies(

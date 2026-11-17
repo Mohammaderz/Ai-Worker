@@ -6,6 +6,7 @@ import json
 import os
 import re
 import textwrap
+import time
 from pathlib import Path, PurePosixPath
 from dataclasses import asdict, dataclass
 from urllib.error import HTTPError, URLError
@@ -19,6 +20,7 @@ from ai_worker.planner import (
     _NoRedirect,
     _validate_local_host,
 )
+from ai_worker.model_router import ollama_call_record, resolve_model_route
 from ai_worker.sources.github_issue import ResearchBrief
 
 
@@ -903,9 +905,12 @@ def review_patch(
     host: str | None = None,
     timeout: int = 300,
     repository_context: list[dict[str, str]] | None = None,
+    task_plan: dict | None = None,
+    verification_evidence: dict | None = None,
+    usage_sink: list[dict] | None = None,
 ) -> ReviewResult:
     """Review a proposed diff against bounded source context; never modify files."""
-    model_name = model or os.getenv("AI_WORKER_REVIEWER_MODEL", DEFAULT_REVIEWER_MODEL)
+    model_name = resolve_model_route("review", override=model).model
     try:
         endpoint = _validate_local_host(host or os.getenv("AI_WORKER_OLLAMA_URL", DEFAULT_HOST))
     except OllamaError as exc:
@@ -954,6 +959,10 @@ def review_patch(
         "patch": diff,
         "repository_context": context,
     }
+    if task_plan is not None:
+        payload["task_plan"] = task_plan
+    if verification_evidence is not None:
+        payload["verification_evidence"] = verification_evidence
     request_body = json.dumps({
         "model": model_name,
         "messages": [
@@ -970,6 +979,11 @@ def review_patch(
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
+    call_started_ns = time.perf_counter_ns()
+    raw = None
+    response_data = None
+    call_outcome = "request_failed"
+    call_error_type = None
     try:
         with build_opener(_NoRedirect()).open(request, timeout=timeout) as response:
             raw = response.read(MAX_RESPONSE_BYTES + 1)
@@ -983,10 +997,23 @@ def review_patch(
         review_data = _validate_review(json.loads(content))
         _validate_finding_locations(review_data, diff)
         review_data = _merge_static_security_findings(review_data, diff, security_sources)
-    except ReviewerError:
+        call_outcome = "schema_validated"
+    except ReviewerError as exc:
+        call_outcome = "response_rejected" if response_data is not None else "request_failed"
+        call_error_type = type(exc).__name__
         raise
     except (OllamaError, HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+        call_outcome = "response_rejected" if response_data is not None else "request_failed"
+        call_error_type = type(exc).__name__
         raise ReviewerError(f"Independent review failed: {exc}") from exc
+    finally:
+        if usage_sink is not None:
+            usage_sink.append(ollama_call_record(
+                stage="review", model=model_name, request_body=request_body,
+                response_body=raw, response_data=response_data,
+                started_ns=call_started_ns, outcome=call_outcome,
+                error_type=call_error_type,
+            ))
 
     return ReviewResult(
         verdict=review_data["verdict"],

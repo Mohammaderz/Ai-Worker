@@ -199,6 +199,19 @@ def test_draft_patch_rejects_needs_information_with_diff():
         })
 
 
+def test_patch_status_rejects_unresolved_questions():
+    from ai_worker.developer import _validate_patch_response
+
+    with pytest.raises(PatchError, match="cannot include unresolved clarification questions"):
+        _validate_patch_response({
+            "status": "patch",
+            "summary": "Patch with unresolved questions.",
+            "diff": DIFF,
+            "assumptions": [],
+            "questions": ["Are there constraints not stated in the issue?"],
+        })
+
+
 def test_draft_patch_fails_when_repair_response_is_invalid(monkeypatch, tmp_path):
     import pytest
 
@@ -309,6 +322,59 @@ def test_question_relevance_requires_two_task_specific_terms():
     }
     with pytest.raises(PatchError, match="not grounded"):
         _validate_question_relevance(unrelated, ISSUE)
+
+
+def test_draft_retries_when_model_asks_for_file_already_in_context(monkeypatch, tmp_path):
+    from ai_worker.developer import _validate_question_relevance
+
+    brief = replace(
+        ISSUE,
+        title="Update client.py retry behavior",
+        body="Update client.py to preserve the configured retry behavior.",
+    )
+    repository_context = [{"path": "client.py", "content": "before\n"}]
+    question = {
+        "status": "needs_information",
+        "questions": ["What is the current content of client.py?"],
+    }
+    with pytest.raises(PatchError, match="already included in the repository context"):
+        _validate_question_relevance(question, brief, repository_context=repository_context)
+
+    responses = [
+        {"message": {"content": json.dumps({
+            "status": "needs_information",
+            "summary": "Need the file contents.",
+            "diff": "",
+            "assumptions": [],
+            "questions": ["What is the current content of client.py?"],
+        })}},
+        {"message": {"content": json.dumps({
+            "status": "patch",
+            "summary": "Update the client retry behavior.",
+            "diff": DIFF,
+            "assumptions": [],
+            "questions": [],
+        })}},
+    ]
+    requests = []
+
+    class FakeOpener:
+        def open(self, request, timeout):
+            requests.append(json.loads(request.data.decode("utf-8")))
+            return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr("ai_worker.developer.build_opener", lambda handler: FakeOpener())
+    proposal = draft_patch(
+        brief,
+        tmp_path,
+        plan=_structured_scope_plan("client.py"),
+        repository_context=repository_context,
+    )
+
+    assert proposal.status == "patch"
+    assert proposal.changed_files == ["client.py"]
+    assert len(requests) == 2
+    assert "already included in the repository context" in requests[1]["messages"][-1]["content"]
 
 
 def test_draft_patch_includes_task_plan_in_model_request(monkeypatch, tmp_path):
@@ -456,8 +522,7 @@ new file mode 100644
     system_prompt = captured["body"]["messages"][0]["content"]
     assert proposal.status == "patch"
     assert proposal.changed_files == ["new_client.py"]
-    assert "A planned new-file path may be absent from context" in system_prompt
-    assert "Do NOT ask for permission or propose an alternative solely because" in system_prompt
+    assert "A new file absent from context may be created only when the issue requires it" in system_prompt
 
 
 def test_relevance_check_does_not_treat_negated_file_creation_as_authorization():
@@ -472,6 +537,23 @@ def test_relevance_check_does_not_treat_negated_file_creation_as_authorization()
     proposal = {
         "status": "needs_information",
         "questions": ["Should src/config.py be created instead?"],
+    }
+
+    _validate_question_relevance(proposal, brief, plan)
+
+
+def test_relevance_check_does_not_confuse_path_suffixes():
+    from ai_worker.developer import _validate_question_relevance
+
+    brief = replace(
+        ISSUE,
+        title="Add another config module",
+        body="Add src/other_config.py for the separate settings parser.",
+    )
+    plan = _structured_scope_plan("src/config.py")
+    proposal = {
+        "status": "needs_information",
+        "questions": ["Should src/other_config.py be added?"],
     }
 
     _validate_question_relevance(proposal, brief, plan)
@@ -502,6 +584,26 @@ def test_plan_scope_rejects_case_normalization_aliases():
     plan = _structured_scope_plan("Client.py")
     with pytest.raises(PatchError, match="outside structured plan scope"):
         _validate_patch_plan_scope(["client.py"], plan)
+
+
+def test_structured_plan_rejects_patch_that_omits_a_planned_test_file():
+    from ai_worker.developer import _validate_patch_plan_scope
+
+    plan = _structured_scope_plan("src/worker.py")
+    plan["implementation_steps"].append("Add timeout boundary tests")
+    plan["steps"].append({
+        "id": "tests",
+        "description": "Add timeout boundary tests",
+        "depends_on": ["client"],
+        "files": ["tests/test_worker.py"],
+    })
+    with pytest.raises(
+        PatchError,
+        match="omits planned implementation files: tests/test_worker.py",
+    ):
+        _validate_patch_plan_scope(
+            ["src/worker.py"], plan, require_complete=True
+        )
 
 
 @pytest.mark.parametrize("path", ["/tmp/file.py", "../file.py", "C:/file.py", "folder/../file.py"])
@@ -1312,6 +1414,53 @@ def test_repair_patch_returns_validated_in_scope_diff(monkeypatch, tmp_path):
     assert payload["authorized_files"] == ["client.py"]
     assert payload["review_findings"][0]["title"] == finding["title"]
     assert seen["request"]["model"] == "qwen2.5-coder:7b"
+    repair_prompt = seen["request"]["messages"][0]["content"]
+    assert "omitted original sections are preserved unchanged" in repair_prompt
+    assert "accurate unified-hunk line counts" in repair_prompt
+
+
+def test_repair_patch_preserves_original_sections_omitted_by_model(monkeypatch, tmp_path):
+    (tmp_path / "client.py").write_text("before\n", encoding="utf-8")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_client.py").write_text("assert True\n", encoding="utf-8")
+    test_diff = """diff --git a/tests/test_client.py b/tests/test_client.py
+--- a/tests/test_client.py
++++ b/tests/test_client.py
+@@ -1 +1 @@
+-assert True
++assert False
+"""
+    current_diff = DIFF + test_diff
+    partial_repair = DIFF.replace("+after", "+fixed")
+    response = {"message": {"content": json.dumps({
+        "status": "patch",
+        "summary": "Repair the client implementation only.",
+        "diff": partial_repair,
+        "assumptions": [],
+        "questions": [],
+    })}}
+
+    class FakeOpener:
+        def open(self, request, timeout):
+            return FakeResponse(response)
+
+    monkeypatch.setattr("ai_worker.developer.build_opener", lambda handler: FakeOpener())
+    plan = _structured_scope_plan("client.py")
+    plan["steps"][0]["files"].append("tests/test_client.py")
+    finding = {
+        "severity": "medium", "file": "client.py", "line": 1,
+        "title": "Client behavior defect", "evidence": "The behavior is incorrect.",
+        "recommendation": "Fix the implementation.",
+    }
+
+    proposal = repair_patch(
+        ISSUE, tmp_path, model="qwen2.5-coder:7b", current_diff=current_diff,
+        findings=[finding], allowed_files=["client.py", "tests/test_client.py"], plan=plan,
+    )
+
+    assert proposal.changed_files == ["client.py", "tests/test_client.py"]
+    assert "+fixed" in proposal.diff
+    assert "+assert False" in proposal.diff
 
 
 def test_repair_patch_rejects_files_outside_original_boundary(monkeypatch, tmp_path):

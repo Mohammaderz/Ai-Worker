@@ -185,7 +185,7 @@ def test_planner_validates_and_serializes_dependency_order(monkeypatch):
     }
     prompt = seen["body"]["messages"][0]["content"]
     assert "Only declare a dependency when" in prompt
-    assert "explicitly list any intended new-file path" in prompt
+    assert "include required test files and intended new files" in prompt
     validated = validate_serialized_task_plan(serialized)
     assert [step["id"] for step in validated["steps"]] == [
         "update-client", "add-tests"

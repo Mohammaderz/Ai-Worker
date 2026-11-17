@@ -4,7 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -12,12 +14,15 @@ from pathlib import Path
 
 from ai_worker.developer import (
     PatchError,
+    _validate_patch_plan_scope,
     apply_patch_in_sandbox,
     collect_repo_context,
     draft_patch,
     repair_patch,
+    validate_patch_text,
 )
 from ai_worker.planner import OllamaError, plan_github_issue
+from ai_worker.model_router import resolve_model_route
 from ai_worker.reviewer import DEFAULT_REVIEWER_MODEL, ReviewerError, review_patch
 from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, MAX_OUTPUT_BYTES, SandboxError, run_in_sandbox
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
@@ -87,6 +92,41 @@ def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _model_usage_summary(records: list[dict]) -> dict:
+    complete_token_records = [
+        item for item in records
+        if item.get("prompt_tokens") is not None
+        and item.get("completion_tokens") is not None
+    ]
+    return {
+        "call_count": len(records),
+        "accepted_response_count": sum(
+            item.get("outcome") in {"accepted", "schema_valid", "schema_validated"}
+            for item in records
+        ),
+        "failed_or_rejected_response_count": sum(
+            item.get("outcome") in {"request_failed", "response_rejected", "rejected"}
+            for item in records
+        ),
+        "prompt_tokens": (
+            sum(item["prompt_tokens"] for item in complete_token_records)
+            if complete_token_records else None
+        ),
+        "completion_tokens": (
+            sum(item["completion_tokens"] for item in complete_token_records)
+            if complete_token_records else None
+        ),
+        "total_tokens": (
+            sum(item["prompt_tokens"] + item["completion_tokens"]
+                for item in complete_token_records)
+            if complete_token_records else None
+        ),
+        "calls_with_token_counts": len(complete_token_records),
+        "cost_usd": None,
+        "token_source": "Ollama response metadata; null means unavailable",
+    }
+
+
 
 def _git_commit(workspace: Path) -> str | None:
     """Read the cloned source revision without running repository code or hooks."""
@@ -120,6 +160,153 @@ def _has_python_tests(workspace: Path) -> bool:
         if "tests" in path.relative_to(workspace).parts:
             return True
     return False
+
+
+def _run_candidate_verification(
+    diff: str,
+    changed_files: list[str],
+    workspace: Path,
+    plan: object,
+    *,
+    scratch: Path,
+    image: str,
+    timeout: int,
+) -> dict:
+    """Apply and run Python checks on an isolated copy before review/acceptance."""
+    evidence = {"schema_version": 1, "checks": [], "patch_applied": False}
+    actual_paths = validate_patch_text(diff)
+    if set(actual_paths) != set(changed_files):
+        evidence["patch_error"] = "Proposal changed-file list does not match its unified diff"
+        evidence["passed"] = False
+        return evidence
+    _validate_patch_plan_scope(actual_paths, plan, require_complete=True)
+    with tempfile.TemporaryDirectory(prefix="ai-worker-verify-", dir=scratch) as temp:
+        candidate = Path(temp) / "workspace"
+        shutil.copytree(workspace, candidate, symlinks=True)
+        applied = apply_patch_in_sandbox(
+            diff, candidate, scratch_root=scratch, image=image,
+            timeout_seconds=min(timeout, 300),
+        )
+        if not applied.applied:
+            evidence["patch_error"] = applied.message
+            evidence["patch_apply_stdout"] = (applied.stdout or "")[-8000:]
+            evidence["patch_apply_stderr"] = (applied.stderr or "")[-8000:]
+            evidence["passed"] = False
+            return evidence
+        evidence["patch_applied"] = True
+        checks = evidence["checks"]
+        commands = []
+        if _has_python_files(candidate):
+            commands.append(("python_compile", ["python", "-m", "compileall", "-q", "."]))
+            if _has_python_tests(candidate):
+                commands.append(("pytest", ["python", "-m", "pytest", "-q"]))
+        for check_name, command in commands:
+            try:
+                result = run_in_sandbox(
+                    candidate, command, scratch_root=scratch, image=image,
+                    timeout_seconds=min(timeout, 600),
+                )
+                checks.append({
+                    "name": check_name,
+                    "command": command,
+                    "required": True,
+                    "ran": result.exit_code is not None,
+                    "exit_code": result.exit_code,
+                    "timed_out": bool(getattr(result, "timed_out", False)),
+                    "stdout": (result.stdout or "")[-8000:],
+                    "stderr": (result.stderr or "")[-8000:],
+                })
+            except SandboxError as exc:
+                checks.append({
+                    "name": check_name, "command": command, "required": True,
+                    "ran": False, "exit_code": None, "timed_out": False,
+                    "error": str(exc)[:2000],
+                })
+    evidence["changed_files"] = list(changed_files)
+    evidence["passed"] = _verification_gate(evidence)
+    return evidence
+
+
+def _verification_gate(evidence: dict) -> bool:
+    """Return true only when every required check has complete passing evidence."""
+    if not isinstance(evidence, dict) or evidence.get("patch_applied") is not True:
+        return False
+    checks = evidence.get("checks")
+    if (
+        not isinstance(checks, list)
+        or any(
+            not isinstance(item, dict)
+            or type(item.get("required")) is not bool
+            for item in checks
+        )
+    ):
+        return False
+    required = [item for item in checks if isinstance(item, dict) and item.get("required") is True]
+    return bool(required) and all(
+        item.get("ran") is True
+        and item.get("timed_out") is False
+        and type(item.get("exit_code")) is int
+        and item.get("exit_code") == 0
+        for item in required
+    )
+
+
+def _has_required_checks(evidence: dict) -> bool:
+    return bool(
+        isinstance(evidence, dict)
+        and isinstance(evidence.get("checks"), list)
+        and any(
+            isinstance(item, dict) and item.get("required") is True
+            for item in evidence["checks"]
+        )
+    )
+
+
+def _verification_findings(evidence: dict, changed_files: list[str]) -> list[dict]:
+    """Convert executed failed checks into reproducible bounded-repair findings."""
+    if not changed_files:
+        return []
+    findings = []
+    if evidence.get("patch_applied") is not True:
+        diagnostic = {
+            "error": evidence.get("patch_error", "Sandbox did not apply the candidate patch"),
+            "stdout": evidence.get("patch_apply_stdout", ""),
+            "stderr": evidence.get("patch_apply_stderr", ""),
+        }
+        findings.append({
+            "severity": "high",
+            "file": changed_files[0],
+            "line": 1,
+            "title": "Candidate patch failed sandbox application",
+            "evidence": json.dumps(diagnostic, ensure_ascii=False)[:1900],
+            "recommendation": (
+                "Return a valid patch against the unchanged repository workspace that "
+                "passes the recorded sandbox git apply check."
+            ),
+        })
+        return findings
+    for check in evidence.get("checks", []):
+        if not isinstance(check, dict) or check.get("required") is not True:
+            continue
+        if check.get("ran") is True and check.get("timed_out") is False and check.get("exit_code") == 0:
+            continue
+        if check.get("ran") is not True or check.get("timed_out") is True:
+            continue
+        details = json.dumps({
+            "command": check.get("command"),
+            "exit_code": check.get("exit_code"),
+            "stdout": check.get("stdout", ""),
+            "stderr": check.get("stderr", ""),
+        }, ensure_ascii=False)
+        findings.append({
+            "severity": "high",
+            "file": changed_files[0],
+            "line": 1,
+            "title": f"Required {check.get('name', 'verification')} check failed",
+            "evidence": details[:1900],
+            "recommendation": "Correct the patch so the recorded command passes without weakening the test or check.",
+        })
+    return findings
 
 
 def _run_pipeline_impl(
@@ -162,6 +349,19 @@ def _run_pipeline_impl(
         output_dir = output_base / f"{brief.repository.replace('/', '-')}-{brief.number}-{run_id}"
         output_dir.mkdir(parents=True, exist_ok=False)
 
+        planning_route = resolve_model_route("planning", override=model)
+        drafting_route = resolve_model_route("drafting", override=model)
+        reviewer_route = resolve_model_route("review", override=reviewer_model)
+        repair_route = resolve_model_route("repair", override=drafting_route.model)
+        model_routes = {
+            "planning": planning_route.to_dict(),
+            "drafting": drafting_route.to_dict(),
+            "repair": repair_route.to_dict(),
+            "review": reviewer_route.to_dict(),
+        }
+        model_usage: list[dict] = []
+        _write_json(output_dir / "model-routing.json", model_routes)
+
         _write_json(output_dir / "issue.json", brief.to_dict())
         if _stage_callback:
             _stage_callback(
@@ -199,12 +399,18 @@ def _run_pipeline_impl(
 
         if _stage_callback:
             _stage_callback('plan')
-        task_plan = plan_github_issue(
-            brief,
-            repository_context=repository_context,
-            model=model,
-            timeout=min(timeout, 900),
-        )
+        try:
+            task_plan = plan_github_issue(
+                brief,
+                repository_context=repository_context,
+                model=planning_route.model,
+                timeout=min(timeout, 900),
+                usage_sink=model_usage,
+            )
+        finally:
+            _write_json(output_dir / "model-usage.json", {
+                "summary": _model_usage_summary(model_usage), "calls": model_usage,
+            })
         _write_json(output_dir / "plan.json", task_plan.to_dict())
         estimated_effort = float(task_plan.estimated_effort_hours)
         estimated_gross_per_hour = (
@@ -219,11 +425,12 @@ def _run_pipeline_impl(
             proposal = draft_patch(
                 brief,
                 workspace,
-                model=model,
+                model=drafting_route.model,
                 timeout=min(timeout, 900),
                 plan=task_plan,
                 repository_context=repository_context,
                 context_diagnostics=context_diagnostics,
+                usage_sink=model_usage,
             )
         except Exception as exc:
             # Preserve whatever repository-intelligence diagnostics were
@@ -268,6 +475,16 @@ def _run_pipeline_impl(
                     "network_access": "disabled_in_task_containers",
                     "external_actions": [],
                 },
+                "model_routing": model_routes,
+                "model_usage": {
+                    "summary": _model_usage_summary(model_usage), "calls": model_usage,
+                },
+                "escalation": {
+                    "required": True,
+                    "performed": False,
+                    "target": "human_or_separately_authorized_higher_tier",
+                    "reason": "Local patch drafting failed; no remote provider or Codex bridge is configured.",
+                },
                 "assessment": {
                     "risk_level": task_plan.risk_level,
                     "blockers": task_plan.blockers,
@@ -299,6 +516,9 @@ def _run_pipeline_impl(
             }
             _write_json(output_dir / "run-manifest.json", failure_manifest)
             raise
+        _write_json(output_dir / "model-usage.json", {
+            "summary": _model_usage_summary(model_usage), "calls": model_usage,
+        })
         context_diagnostics = (
             getattr(proposal, "context_diagnostics", None) or context_diagnostics
         )
@@ -321,17 +541,141 @@ def _run_pipeline_impl(
         review_history: list[dict] = []
         repair_history: list[dict] = []
 
-        effective_reviewer_model = (
-            reviewer_model
-            or os.getenv("AI_WORKER_REVIEWER_MODEL")
-            or DEFAULT_REVIEWER_MODEL
-        )
+        effective_reviewer_model = reviewer_route.model
 
         # Keep the original file authorization boundary for every repair.
         authorized_repair_files = list(proposal.changed_files)
         current_diff = proposal.diff
         current_changed_files = list(proposal.changed_files)
         current_summary = getattr(proposal, "summary", "")
+        verification_evidence = {
+            "schema_version": 1,
+            "patch_applied": False,
+            "checks": [],
+            "passed": False,
+            "status": "not_run",
+        }
+        verification_attempts: list[dict] = []
+
+        verification_eligible = (
+            proposal.status == "patch"
+            and not proposal.questions
+            and not task_plan.blockers
+            and bool(task_plan.acceptance_checklist)
+            and task_plan.risk_level != "high"
+            and not (reward_amount is not None and reward_amount > 500)
+            and effective_reviewer_model != proposal.model
+            and (
+                _has_python_files(workspace)
+                or any(Path(path).suffix.lower() == ".py" for path in proposal.changed_files)
+            )
+        )
+        if verification_eligible:
+            for verification_attempt in range(MAX_REPAIR_ATTEMPTS + 1):
+                if _stage_callback:
+                    _stage_callback(
+                        "verify",
+                        {"phase": "pre-review", "attempt": verification_attempt},
+                    )
+                verification_evidence = _run_candidate_verification(
+                    current_diff,
+                    current_changed_files,
+                    workspace,
+                    task_plan,
+                    scratch=scratch,
+                    image=image,
+                    timeout=timeout,
+                )
+                verification_evidence["status"] = (
+                    "passed" if verification_evidence.get("passed")
+                    else "failed_or_incomplete"
+                )
+                verification_attempts.append(
+                    json.loads(json.dumps(verification_evidence, ensure_ascii=False))
+                )
+                if _verification_gate(verification_evidence):
+                    break
+
+                qa_findings = _verification_findings(
+                    verification_evidence, authorized_repair_files
+                )
+                if (
+                    verification_evidence.get("patch_applied") is True
+                    and not _has_required_checks(verification_evidence)
+                ):
+                    break
+                if (
+                    not qa_findings
+                    or len(repair_history) >= MAX_REPAIR_ATTEMPTS
+                ):
+                    break
+
+                try:
+                    repaired = repair_patch(
+                        brief,
+                        str(workspace),
+                        model=proposal.model,
+                        current_diff=current_diff,
+                        findings=qa_findings,
+                        allowed_files=authorized_repair_files,
+                        plan=task_plan,
+                        repository_context=repository_context,
+                        timeout=min(timeout, 900),
+                        usage_sink=model_usage,
+                    )
+                    repaired_diff = getattr(repaired, "diff", None)
+                    repaired_files = getattr(repaired, "changed_files", None)
+                    if (
+                        getattr(repaired, "status", None) != "patch"
+                        or not isinstance(repaired_diff, str)
+                        or not repaired_diff.strip()
+                        or not isinstance(repaired_files, list)
+                        or not repaired_files
+                        or set(repaired_files) - set(authorized_repair_files)
+                        or repaired_diff.strip() == current_diff.strip()
+                    ):
+                        raise PatchError(
+                            "Test-feedback repair was invalid, unchanged, or outside the original file scope"
+                        )
+                    current_diff = repaired_diff
+                    current_changed_files = list(repaired_files)
+                    current_summary = getattr(repaired, "summary", "")
+                    verification_evidence = _run_candidate_verification(
+                        current_diff, current_changed_files, workspace,
+                        task_plan,
+                        scratch=scratch, image=image, timeout=timeout,
+                    )
+                    verification_evidence["status"] = (
+                        "passed" if verification_evidence.get("passed")
+                        else "failed_or_incomplete"
+                    )
+                    verification_attempts.append(
+                        json.loads(json.dumps(verification_evidence, ensure_ascii=False))
+                    )
+                    repair_history.append({
+                        "attempt": verification_attempt + 1,
+                        "status": "repaired_after_verification_failure",
+                        "summary": getattr(repaired, "summary", "Repaired after failed verification."),
+                        "changed_files": current_changed_files,
+                        "findings": qa_findings,
+                    })
+                except PatchError as exc:
+                    repair_error = str(exc)
+                    repair_history.append({
+                        "attempt": verification_attempt + 1,
+                        "status": "failed",
+                        "error": repair_error,
+                        "findings": qa_findings,
+                    })
+                    break
+
+        verification_with_history = {
+            **verification_evidence,
+            "attempts": verification_attempts,
+        }
+        _write_json(output_dir / "verification.json", {
+            "pre_review": verification_with_history,
+        })
 
         if _stage_callback:
             _stage_callback("review")
@@ -366,13 +710,20 @@ def _run_pipeline_impl(
                         )
 
                     try:
+                        review_verification_evidence = {
+                            **verification_evidence,
+                            "attempts": verification_attempts,
+                        }
                         review = review_patch(
                             brief,
                             str(workspace),
                             current_diff,
                             model=effective_reviewer_model,
                             repository_context=repository_context,
+                            task_plan=task_plan.to_dict(),
+                            verification_evidence=review_verification_evidence,
                             timeout=min(timeout, 900),
+                            usage_sink=model_usage,
                         )
                     except ReviewerError as exc:
                         reviewer_verdict = "unavailable"
@@ -432,7 +783,7 @@ def _run_pipeline_impl(
                         )
                         break
 
-                    if review_index >= MAX_REPAIR_ATTEMPTS:
+                    if len(repair_history) >= MAX_REPAIR_ATTEMPTS:
                         repair_error = (
                             f"Maximum bounded repair attempts "
                             f"({MAX_REPAIR_ATTEMPTS}) exhausted."
@@ -479,6 +830,7 @@ def _run_pipeline_impl(
                             plan=task_plan,
                             repository_context=repository_context,
                             timeout=min(timeout, 900),
+                            usage_sink=model_usage,
                         )
 
                         if getattr(repaired, "status", None) != "patch":
@@ -527,6 +879,18 @@ def _run_pipeline_impl(
                         current_diff = repaired_diff
                         current_changed_files = list(repaired_files)
                         current_summary = repaired.summary
+                        verification_evidence = _run_candidate_verification(
+                            current_diff, current_changed_files, workspace,
+                            task_plan,
+                            scratch=scratch, image=image, timeout=timeout,
+                        )
+                        verification_evidence["status"] = (
+                            "passed" if verification_evidence.get("passed")
+                            else "failed_or_incomplete"
+                        )
+                        verification_attempts.append(
+                            json.loads(json.dumps(verification_evidence, ensure_ascii=False))
+                        )
 
                         repair_history.append({
                             "attempt": repair_number,
@@ -575,6 +939,7 @@ def _run_pipeline_impl(
         node_test_log = ""
         node_build_log = ""
         node_check_reason = None
+        node_changed_files: list[str] = []
         if reviewer_verdict == "unavailable":
             status = "reviewer_unavailable_blocked"
             message = "Independent review was unavailable or invalid; fail-closed policy prevented patch application. " + reviewer_error
@@ -592,6 +957,21 @@ def _run_pipeline_impl(
         elif proposal.status == "needs_information":
             status = "needs_human_clarification"
             message = "The model did not produce a safe diff. Review the plan and questions; no patch was applied."
+            compile_code = tests_code = None
+            tests_detected = False
+            compile_log = tests_log = ""
+        elif (
+            proposal.status == "patch"
+            and _has_required_checks(verification_evidence)
+            and not _verification_gate(verification_evidence)
+        ):
+            status = "verification_failed"
+            message = (
+                "Required pre-review verification failed or was incomplete; "
+                "the reviewer verdict cannot authorize patch application."
+            )
+            if repair_error:
+                message += " Bounded test-feedback repair stopped: " + repair_error
             compile_code = tests_code = None
             tests_detected = False
             compile_log = tests_log = ""
@@ -837,6 +1217,7 @@ def _run_pipeline_impl(
                                 "Patch applied in the disposable sandbox; "
                                 "detected pytest suite passed. No submission was made."
                             )
+
                         elif compile_code is None and node_static_code is None:
                             status = "no_automated_tests_detected"
                             message = (
@@ -858,6 +1239,74 @@ def _run_pipeline_impl(
                                 + ". No automated test suite was detected. "
                                 "Human review is required."
                             )
+
+        final_checks = []
+        if _has_python_files(workspace):
+            final_checks.append({
+                "name": "python_compile", "required": True,
+                "ran": compile_code is not None, "exit_code": compile_code,
+                "timed_out": False,
+            })
+        if tests_detected:
+            final_checks.append({
+                "name": "pytest", "required": True,
+                "ran": tests_code is not None, "exit_code": tests_code,
+                "timed_out": False,
+            })
+        if node_changed_files:
+            final_checks.append({
+                "name": "javascript_typescript_syntax", "required": True,
+                "ran": node_static_code is not None, "exit_code": node_static_code,
+                "timed_out": False,
+            })
+        if node_project_info and node_project_info.has_test_script:
+            final_checks.append({
+                "name": "node_test", "required": True,
+                "ran": node_test_code is not None, "exit_code": node_test_code,
+                "timed_out": False,
+            })
+        if node_project_info and node_project_info.has_build_script:
+            final_checks.append({
+                "name": "node_build", "required": True,
+                "ran": node_build_code is not None, "exit_code": node_build_code,
+                "timed_out": False,
+            })
+        if reviewer_verdict == "pass":
+            final_checks.append({
+                "name": "independent_review", "required": True,
+                "ran": True, "exit_code": 0, "timed_out": False,
+            })
+        final_verification = {
+            "schema_version": 1,
+            "patch_applied": status in {
+                "ready_for_human_review", "tests_failed", "compile_failed",
+                "node_project_invalid", "node_checks_not_run", "node_tests_failed",
+                "node_build_failed", "no_automated_tests_detected",
+                "static_check_passed_no_tests",
+            },
+            "checks": final_checks,
+        }
+        final_verification["passed"] = _verification_gate(final_verification)
+        verification_evidence["final"] = final_verification
+        verification_with_history = {
+            **verification_evidence,
+            "attempts": verification_attempts,
+        }
+        _write_json(output_dir / "verification.json", {
+            "pre_review": verification_with_history,
+            "final": final_verification,
+        })
+        if status == "ready_for_human_review" and not final_verification["passed"]:
+            status = "verification_incomplete"
+            message = (
+                "The candidate lacks complete passing evidence for every required "
+                "automated and independent-review check; it is not eligible for handoff."
+            )
+
+        model_usage_summary = _model_usage_summary(model_usage)
+        _write_json(output_dir / "model-usage.json", {
+            "summary": model_usage_summary, "calls": model_usage,
+        })
 
         if _stage_callback:
             _stage_callback('finalize')
@@ -958,7 +1407,7 @@ def _run_pipeline_impl(
         if repair_history:
             lines.extend(["## Bounded repair history", ""])
             for item in repair_history:
-                if item["status"] == "repaired":
+                if item["status"].startswith("repaired"):
                     lines.append(
                         f"- Attempt {item['attempt']}: "
                         f"repaired `{', '.join(item['changed_files'])}` — "
@@ -1014,6 +1463,21 @@ def _run_pipeline_impl(
                 "network_access": "disabled_in_task_containers",
                 "external_actions": [],
             },
+            "model_routing": model_routes,
+            "model_usage": {
+                "summary": model_usage_summary,
+                "calls": model_usage,
+                "artifact": "model-usage.json",
+            },
+            "escalation": {
+                "required": status not in {"ready_for_human_review"},
+                "performed": False,
+                "target": "human_or_separately_authorized_higher_tier",
+                "reason": (
+                    "No remote provider or Codex bridge is configured;"
+                    " no escalation request was sent."
+                ),
+            },
             "assessment": {
                 "risk_level": task_plan.risk_level,
                 "blockers": task_plan.blockers,
@@ -1033,6 +1497,8 @@ def _run_pipeline_impl(
                 "context_report": "context-report.json",
             },
             "checks": {
+                "pre_review_verification": verification_with_history,
+                "final_verification": final_verification,
                 "python_compile": {"ran": compile_code is not None, "exit_code": compile_code},
                 "pytest": {"detected": tests_detected, "ran": tests_code is not None, "exit_code": tests_code},
                 "javascript_typescript_syntax": {"ran": node_static_code is not None, "exit_code": node_static_code},

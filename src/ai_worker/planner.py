@@ -5,12 +5,14 @@ import json
 import math
 import os
 import re
+import time
 from dataclasses import dataclass, asdict, field
 from pathlib import PurePosixPath, PureWindowsPath
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from ai_worker.model_router import ollama_call_record, resolve_model_route
 from ai_worker.sources.github_issue import ResearchBrief
 
 
@@ -313,9 +315,10 @@ def plan_github_issue(
     model: str | None = None,
     host: str | None = None,
     timeout: int = 300,
+    usage_sink: list[dict] | None = None,
 ) -> TaskPlan:
     """Ask a loopback-only local Ollama model to draft a structured work plan."""
-    model_name = model or os.getenv("AI_WORKER_OLLAMA_MODEL", DEFAULT_MODEL)
+    model_name = resolve_model_route("planning", override=model).model
     endpoint = _validate_local_host(host or os.getenv("AI_WORKER_OLLAMA_URL", DEFAULT_HOST))
     if not model_name or len(model_name) > 128 or any(ch.isspace() for ch in model_name):
         raise OllamaError("Invalid Ollama model name")
@@ -348,8 +351,9 @@ def plan_github_issue(
         "use a stable id, its zero-based implementation_step_index, depends_on IDs, "
         "and files. Only declare a dependency when the issue or repository snapshot "
         "supports that ordering; otherwise use an empty depends_on list. Include file "
-        "paths only when supported by task or repository evidence, and explicitly list "
-        "any intended new-file path. Never invent paths."
+        "paths only when supported by task or repository evidence. Treat every listed "
+        "file as an expected implementation target that the complete patch must modify; "
+        "include required test files and intended new files. Never invent paths."
     )
     issue_payload = {
         "title": brief.title,
@@ -384,6 +388,11 @@ def plan_github_issue(
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
+    call_started_ns = time.perf_counter_ns()
+    raw = None
+    response_data = None
+    call_outcome = "request_failed"
+    call_error_type = None
     try:
         opener = build_opener(_NoRedirect())
         with opener.open(request, timeout=timeout) as response:
@@ -396,10 +405,22 @@ def plan_github_issue(
         if not isinstance(content, str):
             raise OllamaError("Ollama returned no structured message content")
         plan_data = _validate_plan(json.loads(content))
+        call_outcome = "accepted"
     except OllamaError:
+        call_outcome = "response_rejected"
+        call_error_type = "OllamaError"
         raise
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
+        call_error_type = type(exc).__name__
         raise OllamaError(f"Local Ollama request failed: {exc}") from exc
+    finally:
+        if usage_sink is not None:
+            usage_sink.append(ollama_call_record(
+                stage="planning", model=model_name, request_body=request_body,
+                response_body=raw, response_data=response_data,
+                started_ns=call_started_ns, outcome=call_outcome,
+                error_type=call_error_type,
+            ))
 
     return TaskPlan(
         issue_url=brief.url,

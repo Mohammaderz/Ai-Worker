@@ -63,6 +63,8 @@ def test_reviewer_returns_validated_review_and_untrusted_context(monkeypatch, tm
     result = review_patch(
         brief(), str(tmp_path), "diff --git a/client.py b/client.py\n",
         model="review-model",
+        task_plan={"acceptance_checklist": ["preserve behavior"]},
+        verification_evidence={"checks": [{"name": "pytest", "exit_code": 0}]},
     )
 
     assert result.verdict == "pass"
@@ -71,6 +73,9 @@ def test_reviewer_returns_validated_review_and_untrusted_context(monkeypatch, tm
     assert seen["body"]["model"] == "review-model"
     assert "untrusted data" in seen["body"]["messages"][0]["content"]
     assert seen["body"]["messages"][1]["content"].find("client.py") >= 0
+    review_payload = json.loads(seen["body"]["messages"][1]["content"].split("\n", 1)[1])
+    assert review_payload["task_plan"]["acceptance_checklist"] == ["preserve behavior"]
+    assert review_payload["verification_evidence"]["checks"][0]["exit_code"] == 0
     assert seen["timeout"] == 300
 
 
