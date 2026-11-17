@@ -257,3 +257,52 @@ This section supersedes earlier checkpoint SHAs and PR states above. The connect
 3. Integrate actual sandbox exit codes into QACheck and add a separate reviewer invocation with bounded time/retry/cost controls. Reviewer errors or inconclusive results must block.
 4. Add seeded vulnerable, incorrect, incomplete and out-of-scope patch fixtures; measure reviewer defect detection and false-positive rates before using it as a gate.
 5. Do not merge any PR or perform external marketplace/payment actions without the required explicit approval.
+
+
+## 13. Live audit and engineering update — 2026-11-17
+This section records a fresh connected-GitHub audit. SHAs and CI links below are exact observations; recheck them before further changes.
+
+### Verified default branch and PR topology
+- Default branch is `main`; verified head: `6f89b6dca43ba635e53ec9b2281a7e03814034fa` (commit: [Document realized payout latency metrics](https://github.com/Mohammaderz/Ai-Worker/commit/6f89b6dca43ba635e53ec9b2281a7e03814034fa)).
+- PRs #5–#30 are open and unmerged at this checkpoint.
+- PR #5: ready for review, base `main`, head `0df6b02765632c57fa7444f0185f01b1661b54bc`; 49 commits, 13 changed files. Exact-head Actions run #396 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43686811383. The job completed pytest, macOS bootstrap syntax, Python/Node sandbox builds, Node/TypeScript transpilation smoke, isolated-execution smoke, and patch-application smoke.
+- PR #6: draft, base `main`. A new fee-preservation correction was committed to `feat/market-intelligence-priorities` at `437cd4b6764ad755d614a8d3a14ab56c7b7a87e4`. Exact-head Actions run #593 was observed in progress at the time of this checkpoint: https://github.com/Mohammaderz/Ai-Worker/actions/runs/44080693293. Do not call it passed until rechecked.
+- PR #7: draft, stacked on PR #6. Its recorded base SHA `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b` is behind the current PR #6 head `437cd4b6764ad755d614a8d3a14ab56c7b7a87e4`; refresh/reconcile it before integration. Its historical run #365 succeeded on its old exact head, but that does not validate the newer base.
+- PR #8: ready for review, base `main`, head `cae31e4945b70123e10ee4132aa3e54705432ca9`; exact-head run #389 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43686724998.
+- PR #9: draft documentation/roadmap PR, base `main`, head `4c292f18efab365ffad057d137b11a9a21992528`; exact-head run #586 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43985416376.
+- PR #10: draft, stacked on PR #5, head `920f4ac28401820e4fcfdec5932d4f106210689e`; exact-head run #409 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43717141764. It adds reviewer/QA contracts, not a fully operational model reviewer.
+- PR #11: draft, base `product/competitive-roadmap`, head `9e000de2e3b87630f4eb424534602140d33e734d`; exact-head run #468 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43737260857. The base branch is not represented by an open PR in the current #5–#30 queue; resolve its ancestry before integration.
+- PRs #12–#30 are open draft changes in a long reviewer/security-analysis chain. PR #22 exact-head run #534 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43744399234. PR #30 exact-head run #575 succeeded: https://github.com/Mohammaderz/Ai-Worker/actions/runs/43748850928. These spot checks do not imply every intermediate PR has current passing CI.
+- PRs #28 and #29 both branch from PR #27; PR #30 extends PR #29. Do not flatten or bulk-merge this graph.
+- `docs/PROJECT_BRIEF.md` was not found on `main` at this checkpoint (GitHub contents API returned 404). The operator playbook and master tracker are currently present on their feature/documentation branches, not on `main`.
+- The local Mac working tree and its reported uncommitted Node QA files remain inaccessible to this run. Preserve them; do not reset, clean, overwrite, or claim they were tested.
+
+### Verified ledger correction on PR #6
+- Root cause: `record_outcome` defaulted `fees` to 0.0 and unconditionally wrote `excluded.fees`; a later status update that omitted `--fees` could silently erase an already recorded fee and overstate net income.
+- Commit `437cd4b6764ad755d614a8d3a14ab56c7b7a87e4` changes the function and CLI default to `None`, uses `COALESCE(excluded.fees, task_outcomes.fees)`, and adds regression coverage for fee preservation and explicit zero correction.
+- User-facing semantics: omitting `--fees` preserves the previous fee; explicitly passing `--fees 0` sets it to zero.
+- The code diff and new tests were inspected after commit. GitHub Actions run #593 was still in progress when recorded; local tests were not run in this connected GitHub-only environment. Recheck CI before marking this fix verified.
+- PR #7's base now needs synchronization with PR #6 before its CI can be treated as current against the new base.
+
+### Official Bounty API research — 2026-11-17
+Sources:
+- Raw API documentation: https://docs.trybounty.ai/agents/raw-interface/
+- OpenAPI 3.1 contract: https://api.trybounty.ai/openapi.json
+- Agent setup: https://docs.trybounty.ai/agents/connect/
+- Terms (updated 2026-11-02): https://trybounty.ai/terms-and-conditions
+
+Verified implications:
+1. `payout_cents` is the Agent's payout amount. For `flow=bid`, it is null until the owner accepts a bid; `budget_cents` is only a pricing guide, not a committed reward. Deprecated `amount_cents` is buyer-facing all-in price including the platform fee. Never rank a bid-flow listing as a fixed $ payout using its budget.
+2. `flow=claim` is a funded fixed-payout path, but payment is released only after verification/review/settlement; disputes/refunds can still prevent payment.
+3. The Agent Operator must complete Stripe Connect to receive payouts. Bounty holds earnings until payout setup is ready. Terms list supported countries, but Stripe approval applies and the terms warn that payouts outside the US may not be available even in a listed country. Do not assume this user's payout account is ready from country alone; the user must verify their own account status.
+4. The official list-item OpenAPI schema does not expose a public listing URL. Do not fabricate a `trybounty.ai/bounty/{id}` route or pretend the API detail URL is a public task page. Until a documented public URL or verified link field is available, preserve the Bounty record as direct-source/needs-review rather than forcing it through the common `Gig` path with a misleading URL.
+5. The current `BountyOpportunity` adapter stores verification text and distinguishes fixed payout from budget, but it is still discovery-only and does not pass through the common software-fit, risk, payout-readiness, and economic gates. It must not feed the coding pipeline.
+6. The API documentation recommends polling open Bounties and honoring `Retry-After` for 429. Current adapter remains read-only; no bid, claim, message, submission, webhook, or wallet operation was introduced.
+
+### Next safe implementation order
+1. Recheck PR #6 run #593 and exact head; if successful, reconcile PR #7 base without force-pushing.
+2. Audit the complete PR dependency graph and changed-file overlap; do not merge any PR to `main` without explicit approval.
+3. Keep Bounty direct records in a typed review queue until documented task URL and account-specific payout readiness can be represented without fabricating either.
+4. Design separate fields for reward funding/settlement evidence and operator payout readiness; they are different facts and must not share one `payment_state`.
+5. Only then add a canonical adapter projection for claim-flow records, while bid-flow records with null payout remain estimate-only/manual review.
+6. Keep actual payout fees optional on updates and preserve all historical fee values unless the operator explicitly corrects them.
