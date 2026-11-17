@@ -233,3 +233,39 @@ When a new product/engineering idea is accepted, record it here (or as a linked 
 - No premature microservices or always-on cloud deployment before durability/security/cost gates.
 - No all-language support at once.
 - No revenue, acceptance, quality, or security claims without measured evidence.
+
+
+## 9. Live integration and payout-readiness audit — 2026-11-17
+Fresh GitHub verification:
+- `main` head is `6f89b6dca43ba635e53ec9b2281a7e03814034fa`.
+- PRs #5–#30 remain open/unmerged at this checkpoint.
+- #5 targets main (ready for review); exact-head run #396 passed all workflow steps.
+- #6 targets main (draft); head advanced to `437cd4b6764ad755d614a8d3a14ab56c7b7a87e4` for fee preservation; exact-head run #593 was in progress when checked.
+- #7 is stacked on #6 but its base SHA `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b` is behind the new #6 head; do not integrate until synchronized and revalidated.
+- #8 targets main and exact-head run #389 passed.
+- #9 targets main and exact-head run #586 passed.
+- #10 is stacked on #5 and exact-head run #409 passed.
+- #11 is based on `product/competitive-roadmap`, a branch not represented by an open PR in this queue; ancestry remains unresolved.
+- #22 and #30 exact-head runs #534 and #575 passed. These are spot checks, not evidence that every PR #12–#29 has current green CI.
+- #28 and #29 are parallel children of #27; #30 extends #29.
+- The local Mac Node QA work described in earlier tracker notes is still not accessible here. Do not overwrite or claim it is published/tested.
+- `docs/PROJECT_BRIEF.md` is absent from main at this checkpoint; GitHub returned 404.
+
+### Payout ledger bug fixed on PR #6
+Commit `437cd4b6764ad755d614a8d3a14ab56c7b7a87e4` changes omitted fees from implicit zero to `None` and updates SQL to preserve existing fees with `COALESCE`. Explicit `--fees 0` remains a deliberate correction. Regression tests cover storage behavior and CLI default handling. Exact-head CI run #593 was still running when recorded; do not mark verified until it completes successfully. PR #7 now requires base synchronization.
+
+### Bounty integration decision from current official docs
+- Official API: https://docs.trybounty.ai/agents/raw-interface/ and OpenAPI: https://api.trybounty.ai/openapi.json
+- Terms updated 2026-11-02: https://trybounty.ai/terms-and-conditions
+- `payout_cents` is the Agent's actual payout field; bid-flow listings have it null until a bid is accepted. `budget_cents` is only guidance and deprecated `amount_cents` is the buyer's all-in price, not Agent revenue.
+- Claim-flow Bounties are funded fixed-payout work, but settlement still depends on verification/review and may be disputed/refunded.
+- Stripe Connect is required for payout receipt; Bounty holds earnings until setup is ready. Country support is conditional on Stripe approval, and terms warn non-US payouts may not be available even in listed countries.
+- The current OpenAPI list-item schema has no public listing URL field. Do not invent a Bounty page route or insert an API endpoint as if it were a public task link.
+- Therefore the current TryBounty adapter remains discovery-only. It must not pass into common `Gig` qualification or the coding pipeline until source URL provenance, payout readiness, claim-vs-bid economics, and risk/acceptance evidence are represented explicitly.
+
+### Required next steps
+1. Recheck #6 run #593 and its exact head; if green, synchronize #7 without force-push and rerun its CI.
+2. Keep PR integration gated by dependency DAG, changed-file overlap, exact-head CI, and explicit human merge approval.
+3. Separate task funding/escrow evidence from operator payout-account readiness in the opportunity model.
+4. Add a typed needs-review state for direct-source records whose public URL or payout readiness is unknown; do not force them into the existing strict `Gig` path.
+5. Continue project-aware Node QA and sandbox hardening only after preserving/checkpointing the inaccessible local Mac work.
