@@ -70,7 +70,7 @@ def main() -> int:
     ])
     ledger_record.add_argument("--actual-hours", type=float)
     ledger_record.add_argument("--gross-received", type=float)
-    ledger_record.add_argument("--fees", type=float, default=0.0)
+    ledger_record.add_argument("--fees", type=float, default=None)
     ledger_record.add_argument("--notes", default="")
     ledger_record.add_argument("--db", default="data/ai_worker.sqlite3")
     ledger_report = ledger_sub.add_parser("report")

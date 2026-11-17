@@ -76,7 +76,7 @@ def record_outcome(
     *,
     actual_hours: float | None = None,
     gross_received: float | None = None,
-    fees: float = 0.0,
+    fees: float | None = None,
     notes: str = "",
 ) -> None:
     import math
@@ -128,7 +128,7 @@ def record_outcome(
             status=excluded.status,
             actual_hours=COALESCE(excluded.actual_hours,task_outcomes.actual_hours),
             gross_received=COALESCE(excluded.gross_received,task_outcomes.gross_received),
-            fees=excluded.fees,
+            fees=COALESCE(excluded.fees,task_outcomes.fees),
             submitted_at=COALESCE(task_outcomes.submitted_at,excluded.submitted_at),
             accepted_at=COALESCE(task_outcomes.accepted_at,excluded.accepted_at),
             paid_at=COALESCE(task_outcomes.paid_at,excluded.paid_at),

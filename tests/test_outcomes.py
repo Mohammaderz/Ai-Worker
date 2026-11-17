@@ -202,3 +202,26 @@ def test_source_economics_uses_only_realized_outcomes_and_requires_sample_size(t
     assert source["paid_task_hours"] == 6
     assert source["net_per_paid_hour"] == pytest.approx(62 / 6, abs=0.01)
     assert source["confidence"] == "usable"
+
+
+
+def test_omitted_fee_update_preserves_recorded_fee_and_explicit_zero_clears_it(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    seed(db)
+
+    record_outcome(db, "board:task-1", "claimed")
+    record_outcome(db, "board:task-1", "in_progress", actual_hours=2.0)
+    record_outcome(db, "board:task-1", "submitted")
+    record_outcome(db, "board:task-1", "accepted", fees=1.25)
+    record_outcome(db, "board:task-1", "paid", gross_received=25)
+
+    summary = outcome_summary(db)
+    assert summary["fees"] == 1.25
+    assert summary["net_received"] == 23.75
+
+    # An explicit zero is a correction, not an omitted value.
+    record_outcome(db, "board:task-1", "paid", fees=0)
+    corrected = outcome_summary(db)
+    assert corrected["fees"] == 0
+    assert corrected["net_received"] == 25
+    db.close()
