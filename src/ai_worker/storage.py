@@ -36,6 +36,52 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(gig_id) REFERENCES gigs(id)
     )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS task_runs (
+        run_id TEXT PRIMARY KEY,
+        issue_url TEXT NOT NULL,
+        repository TEXT,
+        issue_number INTEGER,
+        status TEXT NOT NULL,
+        current_stage TEXT NOT NULL,
+        output_dir TEXT,
+        result_json TEXT,
+        error TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        updated_at TEXT NOT NULL
+    )""")
+    task_run_columns = {
+        row[1] for row in db.execute("PRAGMA table_info(task_runs)")
+    }
+    for column, definition in (
+        ("repository", "TEXT"),
+        ("issue_number", "INTEGER"),
+        ("result_json", "TEXT"),
+        ("result_status", "TEXT"),
+    ):
+        if column not in task_run_columns:
+            db.execute(f"ALTER TABLE task_runs ADD COLUMN {column} {definition}")
+
+    db.execute("""
+        UPDATE task_runs
+        SET result_status = status, status = 'completed'
+        WHERE status NOT IN ('running', 'completed', 'failed')
+          AND result_status IS NULL
+    """)
+    db.execute("""CREATE TABLE IF NOT EXISTS task_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        status TEXT,
+        details_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(run_id) REFERENCES task_runs(run_id)
+    )""")
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_task_events_run_id "
+        "ON task_events(run_id, id)"
+    )
     db.commit()
     return db
 
@@ -186,3 +232,209 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
         "median_payout_latency_days": round(median(payout_latencies), 2) if payout_latencies else None,
         "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded.",
     }
+
+
+def create_task_run(
+    db: sqlite3.Connection,
+    run_id: str,
+    issue_url: str,
+    *,
+    output_dir: str | None = None,
+) -> None:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    with db:
+        db.execute(
+            """INSERT INTO task_runs(
+                run_id, issue_url, status, current_stage, output_dir,
+                started_at, updated_at
+            ) VALUES(?, ?, 'running', 'inspect', ?, ?, ?)""",
+            (run_id, issue_url, output_dir, now, now),
+        )
+        db.execute(
+            """INSERT INTO task_events(
+                run_id, event_type, stage, status, details_json, created_at
+            ) VALUES(?, 'run_started', 'inspect', 'running', '{}', ?)""",
+            (run_id, now),
+        )
+
+
+def advance_task_run(
+    db: sqlite3.Connection,
+    run_id: str,
+    stage: str,
+    *,
+    status: str = "running",
+    details: dict | None = None,
+    output_dir: str | None = None,
+    error: str | None = None,
+    finished: bool = False,
+    repository: str | None = None,
+    issue_number: int | None = None,
+    result_json: str | None = None,
+    result_status: str | None = None,
+) -> None:
+    from datetime import datetime, timezone
+
+    allowed_statuses = {"running", "completed", "failed"}
+    if status not in allowed_statuses:
+        raise ValueError(f"Unknown task lifecycle status: {status}")
+
+    allowed_stages = (
+        "inspect", "clone", "plan", "draft", "review",
+        "apply", "verify", "finalize", "complete", "failed",
+    )
+    if stage not in allowed_stages:
+        raise ValueError(f"Unknown task lifecycle stage: {stage}")
+
+    if not isinstance(finished, bool):
+        raise ValueError("finished must be a boolean")
+    if stage == "failed":
+        if status != "failed" or not finished:
+            raise ValueError("The failed stage requires failed status and finished=True")
+    elif stage == "complete":
+        if status != "completed" or not finished:
+            raise ValueError("The complete stage requires completed status and finished=True")
+    elif status != "running" or finished:
+        raise ValueError("Non-terminal stages require running status and finished=False")
+
+    if details is not None and not isinstance(details, dict):
+        raise ValueError("Task event details must be a dictionary")
+
+    now = datetime.now(timezone.utc).isoformat()
+    finished_at = now if finished else None
+    payload = json.dumps(details or {}, ensure_ascii=False)
+    stage_order = {name: index for index, name in enumerate(allowed_stages)}
+
+    # Acquire the SQLite write lock before reading state. This makes the
+    # read/validate/update/event sequence one serialized transaction.
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        current = db.execute(
+            "SELECT status, current_stage FROM task_runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if current is None:
+            raise ValueError(f"Unknown task run: {run_id}")
+
+        current_status, current_stage = current
+        if current_status != "running":
+            raise ValueError(f"Cannot advance terminal task run: {run_id}")
+        if current_stage not in stage_order:
+            raise ValueError(
+                f"Stored task run has an unknown current stage: {current_stage}"
+            )
+
+        if stage != "failed" and stage_order[stage] < stage_order[current_stage]:
+            raise ValueError(
+                f"Task stage cannot move backwards: {current_stage} -> {stage}"
+            )
+
+        cursor = db.execute(
+            """UPDATE task_runs
+               SET status=?, current_stage=?,
+                   output_dir=COALESCE(?, output_dir),
+                   error=COALESCE(?, error),
+                   repository=COALESCE(?, repository),
+                   issue_number=COALESCE(?, issue_number),
+                   result_json=COALESCE(?, result_json),
+                   result_status=COALESCE(?, result_status),
+                   updated_at=?,
+                   finished_at=CASE WHEN ? THEN ? ELSE finished_at END
+               WHERE run_id=? AND status='running' AND current_stage=?""",
+            (
+                status, stage, output_dir, error, repository, issue_number,
+                result_json, result_status, now, int(finished), finished_at,
+                run_id, current_stage,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(
+                f"Task run changed while advancing; transition rejected: {run_id}"
+            )
+
+        db.execute(
+            """INSERT INTO task_events(
+                run_id, event_type, stage, status, details_json, created_at
+            ) VALUES(?, 'stage_update', ?, ?, ?, ?)""",
+            (run_id, stage, status, payload, now),
+        )
+
+
+def _rows_as_dicts(cursor: sqlite3.Cursor) -> list[dict]:
+    columns = [item[0] for item in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def list_task_runs(
+    db: sqlite3.Connection,
+    *,
+    limit: int = 20,
+    status: str | None = None,
+    stale_minutes: int | None = None,
+) -> list[dict]:
+    from datetime import datetime, timedelta, timezone
+
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1 or limit > 1000:
+        raise ValueError("Run limit must be between 1 and 1000")
+    if status is not None and status not in {"running", "completed", "failed"}:
+        raise ValueError(f"Unknown task lifecycle status: {status}")
+    if stale_minutes is not None:
+        if (
+            not isinstance(stale_minutes, int)
+            or isinstance(stale_minutes, bool)
+            or stale_minutes < 1
+        ):
+            raise ValueError("Stale minutes must be a positive integer")
+        if status not in (None, "running"):
+            raise ValueError("Stale-run filtering only supports status='running'")
+
+    query = "SELECT * FROM task_runs"
+    conditions = []
+    params = []
+
+    if status is not None:
+        conditions.append("status = ?")
+        params.append(status)
+
+    if stale_minutes is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_minutes)
+        conditions.append("status = 'running'")
+        conditions.append("julianday(updated_at) <= julianday(?)")
+        params.append(cutoff.isoformat())
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    query += " ORDER BY started_at DESC LIMIT ?"
+    params.append(limit)
+
+    return _rows_as_dicts(db.execute(query, params))
+
+
+def get_task_run(
+    db: sqlite3.Connection,
+    run_id: str,
+) -> dict | None:
+    cursor = db.execute(
+        "SELECT * FROM task_runs WHERE run_id = ?",
+        (run_id,),
+    )
+    rows = _rows_as_dicts(cursor)
+    return rows[0] if rows else None
+
+
+def list_task_run_events(
+    db: sqlite3.Connection,
+    run_id: str,
+) -> list[dict]:
+    return _rows_as_dicts(
+        db.execute(
+            """SELECT id, event_type, stage, status, details_json, created_at
+               FROM task_events
+               WHERE run_id = ?
+               ORDER BY id ASC""",
+            (run_id,),
+        )
+    )

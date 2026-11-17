@@ -74,7 +74,7 @@ def test_failed_patch_check_never_applies(monkeypatch, tmp_path):
 
     assert not result.applied
     assert len(calls) == 1
-    assert (workspace / ".ai-worker-generated.patch").exists()
+    assert not (workspace / ".ai-worker-generated.patch").exists()
 
 
 @pytest.mark.parametrize(
@@ -144,3 +144,67 @@ def test_reject_submodule_index_mode():
     patch = VALID_DIFF.replace("100644", "160000")
     with pytest.raises(PatchError, match="Submodule changes"):
         validate_patch_text(patch)
+
+
+def test_patch_file_is_cleaned_when_sandbox_raises(monkeypatch, tmp_path):
+    root = tmp_path / "scratch"
+    root.mkdir()
+    workspace = root / "repo"
+    workspace.mkdir()
+
+    def failing_runner(*args, **kwargs):
+        from ai_worker.sandbox import SandboxError
+        raise SandboxError("docker unavailable")
+
+    monkeypatch.setattr("ai_worker.developer.run_in_sandbox", failing_runner)
+    from ai_worker.sandbox import SandboxError
+    with pytest.raises(SandboxError, match="docker unavailable"):
+        apply_patch_in_sandbox(VALID_DIFF, workspace, scratch_root=root)
+
+    assert not (workspace / ".ai-worker-generated.patch").exists()
+
+
+def test_patch_apply_refuses_preexisting_patch_path(monkeypatch, tmp_path):
+    root = tmp_path / "scratch"
+    root.mkdir()
+    workspace = root / "repo"
+    workspace.mkdir()
+    patch_file = workspace / ".ai-worker-generated.patch"
+    patch_file.write_text("do not overwrite", encoding="utf-8")
+
+    def unexpected_runner(*args, **kwargs):
+        pytest.fail("sandbox must not run when the patch path already exists")
+
+    monkeypatch.setattr("ai_worker.developer.run_in_sandbox", unexpected_runner)
+    with pytest.raises(PatchError, match="already exists"):
+        apply_patch_in_sandbox(VALID_DIFF, workspace, scratch_root=root)
+
+    assert patch_file.read_text(encoding="utf-8") == "do not overwrite"
+
+
+def test_patch_cleanup_error_does_not_mask_sandbox_error(monkeypatch, tmp_path):
+    root = tmp_path / "scratch"
+    root.mkdir()
+    workspace = root / "repo"
+    workspace.mkdir()
+
+    patch_file = workspace / ".ai-worker-generated.patch"
+
+    def failing_runner(*args, **kwargs):
+        from ai_worker.sandbox import SandboxError
+        raise SandboxError("original sandbox failure")
+
+    original_unlink = type(patch_file).unlink
+
+    def failing_unlink(path, *args, **kwargs):
+        if path.name == ".ai-worker-generated.patch":
+            raise PermissionError("cleanup denied")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr("ai_worker.developer.run_in_sandbox", failing_runner)
+    monkeypatch.setattr("ai_worker.developer.Path.unlink", failing_unlink)
+
+    from ai_worker.sandbox import SandboxError
+
+    with pytest.raises(SandboxError, match="original sandbox failure"):
+        apply_patch_in_sandbox(VALID_DIFF, workspace, scratch_root=root)

@@ -87,7 +87,7 @@ ai-worker prepare --url https://github.com/OWNER/REPO/issues/123 --workspace .ai
 ai-worker plan --url https://github.com/OWNER/REPO/issues/123
 
 # Draft a code diff, save it, then apply it only inside the isolated workspace
-ai-worker patch draft --url https://github.com/OWNER/REPO/issues/123 --workspace .ai-worker/sandboxes/task-123 --diff-output task.patch
+ai-worker patch draft --url https://github.com/OWNER/REPO/issues/123 --workspace .ai-worker/sandboxes/task-123 --plan-file task-plan.json --diff-output task.patch
 ai-worker patch apply --diff-file task.patch --workspace .ai-worker/sandboxes/task-123 --scratch-root .ai-worker/sandboxes
 
 # Run tests without network access inside the sandbox
@@ -95,6 +95,8 @@ ai-worker sandbox run --workspace .ai-worker/sandboxes/task-123 --scratch-root .
 ~~~
 
 Every generated patch must first receive a structured independent review with severity, file, line, evidence, and recommendation. Critical/high findings block it; medium findings require changes; reviewer errors fail closed. The reviewer uses a separate model by default (`deepseek-coder:6.7b` versus the patch generator's `qwen2.5-coder:7b`); `AI_WORKER_REVIEWER_MODEL` or `--reviewer-model` can override it. The generated patch is still only a proposal. Review it and run the project's own tests before considering any external submission.
+
+`patch draft` remains backward compatible when `--plan-file` is omitted: this is legacy manual drafting, without a task-plan file-scope boundary. To constrain the patch, first save the JSON printed by `ai-worker plan` and pass it with `--plan-file`; structured step validation then applies and every changed path must be listed in the plan. Explicitly listed new-file paths are supported.
 
 ## Scheduled opportunity scans
 After this PR is merged into the default branch, a read-only GitHub Actions workflow will scan every six hours and upload a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.

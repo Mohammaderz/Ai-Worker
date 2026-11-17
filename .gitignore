@@ -8,3 +8,8 @@ __pycache__/
 data/
 reports/
 .DS_Store
+
+# Local AI-Worker artifacts and generated package metadata
+.ai-worker/
+*.egg-info/
+*.backup

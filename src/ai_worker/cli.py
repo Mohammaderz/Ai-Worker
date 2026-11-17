@@ -10,7 +10,7 @@ from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
-from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
+from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs, list_task_runs, get_task_run, list_task_run_events
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
@@ -40,6 +40,10 @@ def main() -> int:
     patch_draft.add_argument("--model")
     patch_draft.add_argument("--timeout", type=int, default=600)
     patch_draft.add_argument("--diff-output")
+    patch_draft.add_argument(
+        "--plan-file",
+        help="JSON task plan from `ai-worker plan`; constrains generated patch file scope",
+    )
     patch_apply = patch_sub.add_parser("apply")
     patch_apply.add_argument("--diff-file", required=True)
     patch_apply.add_argument("--workspace", required=True)
@@ -75,6 +79,26 @@ def main() -> int:
     ledger_record.add_argument("--db", default="data/ai_worker.sqlite3")
     ledger_report = ledger_sub.add_parser("report")
     ledger_report.add_argument("--db", default="data/ai_worker.sqlite3")
+
+    runs = sub.add_parser("runs")
+    runs_sub = runs.add_subparsers(dest="runs_command", required=True)
+
+    runs_list = runs_sub.add_parser("list")
+    runs_list.add_argument("--db", default="data/ai_worker.sqlite3")
+    runs_list.add_argument("--limit", type=int, default=20)
+    runs_list.add_argument(
+        "--stale-minutes",
+        type=int,
+        help="Show only running tasks not updated within this many minutes",
+    )
+    runs_list.add_argument(
+        "--status",
+        choices=["running", "completed", "failed"],
+    )
+
+    runs_show = runs_sub.add_parser("show")
+    runs_show.add_argument("run_id")
+    runs_show.add_argument("--db", default="data/ai_worker.sqlite3")
 
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
@@ -133,10 +157,14 @@ def main() -> int:
     if args.command == "patch" and args.patch_command == "draft":
         try:
             brief = inspect_github_issue(args.url)
+            task_plan = None
+            if args.plan_file:
+                task_plan = json.loads(Path(args.plan_file).read_text(encoding="utf-8"))
             proposal = draft_patch(
-                brief, args.workspace, model=args.model, timeout=args.timeout
+                brief, args.workspace, model=args.model, timeout=args.timeout,
+                plan=task_plan,
             )
-        except (GitHubIssueError, PatchError) as exc:
+        except (GitHubIssueError, PatchError, OSError, json.JSONDecodeError) as exc:
             print(f"ERROR: {exc}")
             return 2
         if args.diff_output and proposal.status == "patch":
@@ -195,6 +223,7 @@ def main() -> int:
                 reward_amount=reward_amount,
                 currency=currency,
                 timeout=args.timeout,
+                db_path=args.db,
             )
         except (FeedError, PipelineError) as exc:
             print(f"ERROR: {exc}")
@@ -223,6 +252,37 @@ def main() -> int:
             db.close()
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
+
+    if args.command == "runs":
+        db = connect(args.db)
+        try:
+            if args.runs_command == "list":
+                rows = list_task_runs(
+                    db,
+                    limit=args.limit,
+                    status=args.status,
+                    stale_minutes=args.stale_minutes,
+                )
+                print(json.dumps(rows, ensure_ascii=False, indent=2))
+                return 0
+
+            run = get_task_run(db, args.run_id)
+            if run is None:
+                print(f"ERROR: unknown task run: {args.run_id}")
+                return 1
+
+            events = list_task_run_events(db, args.run_id)
+            print(json.dumps(
+                {"run": run, "events": events},
+                ensure_ascii=False,
+                indent=2,
+            ))
+            return 0
+        except (ValueError, OSError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        finally:
+            db.close()
 
     if args.command == "scan":
         try:

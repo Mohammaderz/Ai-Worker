@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener
 
-from ai_worker.developer import collect_repo_context
+from ai_worker.developer import collect_repo_context, _validate_repository_context
 from ai_worker.planner import (
     DEFAULT_HOST,
     MAX_RESPONSE_BYTES,
@@ -902,6 +902,7 @@ def review_patch(
     model: str | None = None,
     host: str | None = None,
     timeout: int = 300,
+    repository_context: list[dict[str, str]] | None = None,
 ) -> ReviewResult:
     """Review a proposed diff against bounded source context; never modify files."""
     model_name = model or os.getenv("AI_WORKER_REVIEWER_MODEL", DEFAULT_REVIEWER_MODEL)
@@ -923,10 +924,15 @@ def review_patch(
         raise ReviewerError("Patch is empty or exceeds the reviewer input limit")
 
     try:
-        context = collect_repo_context(workspace, brief)
+        context = (
+            collect_repo_context(workspace, brief)
+            if repository_context is None
+            else repository_context
+        )
+        context = _validate_repository_context(context)
         security_sources = _read_changed_python_sources(workspace, diff)
     except (OSError, ValueError, RuntimeError) as exc:
-        raise ReviewerError(f"Could not collect safe repository context: {exc}") from exc
+        raise ReviewerError(f"Could not prepare safe repository context: {exc}") from exc
 
     system_prompt = (
         "You are an independent, skeptical senior software reviewer. Review the proposed unified diff "

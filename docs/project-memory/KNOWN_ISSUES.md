@@ -1,0 +1,28 @@
+# Known issues and uncertainties
+
+**Snapshot date:** 2026-11-17. Confidence is noted per item. These are known limitations/risks, not necessarily defects in every workflow.
+
+**Memory completeness:** The current project memory is an initial snapshot, not a complete historical record. The user has requested the ChatGPT data export, which has not yet been received. Reconstructing the full conversation and verifying original decision dates remain pending.
+
+## Verified or documented limitations
+
+1. **Dependency graph completeness is not proven.** The local planner now supports optional structured steps, explicit dependency IDs, cycle/reference validation, deterministic topological order, and planned file paths. These edges are model-proposed and structurally checked; there is no complete static repository dependency graph or semantic proof that the model identified every necessary edge. Legacy payloads without structured steps remain accepted and have no plan-derived patch file scope. **Verified implementation and limitation; 2026-11-17.**
+2. **Real model reliability is only lightly sampled.** One live `qwen2.5-coder:7b` planning response returned a structured three-step dependency graph accepted by production validation. This is one fixture/request and does not prove general compatibility or graph completeness. **Verified sample; broad reliability remains unverified; 2026-11-17.**
+3. **Patch model did not follow the planned-new-file instruction in a live fixture.** Five real `qwen2.5-coder:7b` drafting responses asked for confirmation to add files explicitly required by the issue and authorized in the structured plan. After a targeted redundant-question check invoked the one allowed retry, the model repeated the question and draft generation failed closed. No patch was generated. The prompt, parser, and scope checks were not weakened; live model behavior remains unreliable for this case. The question check is deliberately targeted and is not general semantic validation. Raw responses are in the temporary evidence directory recorded in `ARCHITECTURE.md`. **Verified model-behavior limitation; 2026-11-17.**
+4. **Plan-based patch scope is conditional on structured plans.** New structured plans enforce draft and repair path scope, including explicitly planned new files. Legacy plans without `steps` retain backward compatibility and existing path safety checks but cannot authorize a bounded set of files. **Verified; 2026-11-17.**
+5. **Standalone CLI plan use is opt-in.** `patch draft` accepts `--plan-file` to enable complete structured-plan validation and planned-file scope. When omitted, the legacy manual-drafting path remains without plan-derived scope. This preserves compatibility but means callers must explicitly provide a plan when they need that boundary. **Verified; 2026-11-17.**
+6. **File authorization requires exact path spelling.** Scope enforcement rejects absolute/traversal/Windows-drive paths and compares safe relative paths exactly, including case and Unicode spelling. This is deliberately conservative across case-sensitive filesystems; users must use the same spelling in the plan and diff. **Verified; 2026-11-17.**
+7. **Project-aware Node test behavior needs continued source review.** README documents JavaScript/TypeScript syntax transpilation and says dependency-aware Node suites are not run. The pre-existing untracked `src/ai_worker/node_qa.py` and `tests/test_node_qa.py` were preserved; this task did not modify them. The full test suite passes but does not establish runtime behavior beyond those tests. **High confidence for documentation; broader capability claim unverified.**
+8. **Sandbox is not documented as a production multi-tenant boundary.** Architecture/product docs note writable workspace quota and immutable local image identity gaps. Reconfirm against current modified `sandbox.py` and Docker files. **Medium-high confidence; docs predate some local changes.**
+9. **Persistent resumable task state, robust recovery, and concurrency are strategic needs, not verified current capabilities.** SQLite stores opportunities/outcomes; do not infer it is a durable execution queue. **Medium-high confidence.**
+10. **Private repository support and GitLab/Bitbucket/Jira integration are not established by current docs.** These are future integration directions. **High confidence from README and architecture docs.**
+11. **Commercial outcomes are unverified.** No evidence in inspected docs/source proves revenue, profitability, successful customer validation, or paid task completion. Do not make such claims. **High confidence about absence of evidence in inspected repository; does not prove no external activity.**
+
+## Historical and process uncertainties
+
+- The requested ChatGPT data export has not yet been received. Earlier decisions, requirements, milestones, failed attempts, and unfinished work may be missing; original decision dates must remain marked unknown until supported by the archive or another dated source.
+- No shared-memory or automatic synchronization workflow between ChatGPT, Codex, or other models is verified as implemented.
+- PR status is time-sensitive. The snapshot in `PR_STATUS.md` must be refreshed before use.
+- Local code is modified and includes untracked files. Docs may describe the committed baseline rather than current worktree behavior.
+- The prior documentation-only task did not run tests; the current engineering suite results are recorded in `CURRENT_STATE.md`. Do not treat documentation edits alone as application verification.
+- The user's requested ChatGPT export remains pending; engineering work is to continue without waiting for it.
