@@ -98,9 +98,7 @@ The generated patch is only a proposal. Review it and run the project's own test
 ## Scheduled opportunity scans
 After this PR is merged into the default branch, a read-only GitHub Actions workflow will scan every six hours and upload a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.
 
-Daily $5-$10 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
-
 ## Development roadmap
-See [docs/IMPLEMENTATION-ROADMAP-INCOME-ENGINE.md](docs/IMPLEMENTATION-ROADMAP-INCOME-ENGINE.md) for the prioritized implementation specification, acceptance criteria, safety gates, evaluation metrics, and instructions for reconciling open PRs #5–#8 without duplicate work.
-
-See docs/ARCHITECTURE.md and sandbox/README.md.
+- [docs/MASTER_EXECUTION_TRACKER.md](docs/MASTER_EXECUTION_TRACKER.md) is the durable cross-conversation backlog, priority order, current work status, PR integration queue, and definition-of-done register.
+- [docs/PRODUCTION_INCOME_ENGINE_ROADMAP.md](docs/PRODUCTION_INCOME_ENGINE_ROADMAP.md) contains the detailed architecture, phased execution specification, safety requirements, and commercial proof criteria.
+- See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [sandbox/README.md](sandbox/README.md).
