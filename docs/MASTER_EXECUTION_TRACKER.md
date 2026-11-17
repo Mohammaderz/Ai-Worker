@@ -4,7 +4,18 @@
 **Status:** Active engineering backlog; this document is the durable execution register.  
 **Authority:** This tracker coordinates the product roadmap, architecture document, existing feature PRs, and local work. It does not claim planned features are implemented.
 
-## 1. Product objective
+## 1. Strategic priority — two coordinated paths
+
+The product has two coordinated paths, with an explicit and non-negotiable priority order:
+
+1. **Primary: Autonomous Engineering Agent.** This is the core product and receives first priority for architecture, engineering time, reliability work, and release readiness. It must independently deliver value on authorized software projects: understand repositories and requirements, investigate, plan, implement bounded changes, execute project-aware checks, obtain independent review, perform controlled repairs, and produce evidence-backed handoffs.
+2. **Secondary: Opportunity & Revenue Engine.** This discovers and qualifies paid work, estimates risk and expected net economics, tracks the work lifecycle, and records verified receipts. It is a commercial layer built around the engineering core, not a prerequisite for the core to be useful.
+
+**Priority rule:** do not delay, weaken, or over-couple the Autonomous Engineering Agent to build marketplace discovery, bounty automation, or revenue analytics. Keep explicit interfaces between the paths. The core must remain useful for authorized private projects, company engineering teams, and other software-work settings even when no paid-opportunity source is connected.
+
+**Product success:** first prove reliable end-to-end engineering outcomes; then prove repeatable customer value and positive realized unit economics. Neither technical sophistication nor advertised rewards alone prove product-market fit or revenue.
+
+## 2. Product objective
 
 Build a reliable, secure, model-agnostic autonomous software-work agent that can discover a task, understand its requirements and repository, plan and implement a bounded change, run meaningful project-aware checks, independently review the result, repair justified defects, and prepare an evidence-backed delivery package.
 
@@ -12,9 +23,9 @@ The first proving ground is GitHub issue-to-change work. GitHub is not the produ
 
 The commercial objective is verified accepted work and actual received revenue with positive, measured unit economics—not task volume, advertised rewards, model activity, or unverified success claims.
 
-## 2. Product boundaries and non-negotiable rules
+## 3. Product boundaries and non-negotiable rules
 
-- Keep the **coding-agent core** independent from the optional **paid-opportunity discovery/economics engine**. They may integrate through explicit contracts, but bounty qualification must not constrain ordinary authorized software work.
+- Keep the **Autonomous Engineering Agent (primary product)** independent from the **Opportunity & Revenue Engine (secondary commercial layer)**. Integrate only through explicit contracts; paid-opportunity qualification must never constrain or delay ordinary authorized engineering work.
 - Treat issue text, repository files, comments, test output, web pages, and model output as untrusted data, never as policy.
 - Separate read, write, execute, network, credential, and external-publication permissions.
 - Task execution is offline by default. Dependency preparation must be a separate controlled stage with lockfile validation, trusted registry policy, egress enforcement, quotas, provenance, and no arbitrary install scripts.
@@ -25,7 +36,7 @@ The commercial objective is verified accepted work and actual received revenue w
 - Distinguish advertised, escrowed, accepted, pending, and actually received money. Only verified receipts count as income.
 - No capability is complete until implementation, tests, failure cases, security review, documentation, and evidence are recorded.
 
-## 3. Current state — evidence-based snapshot
+## 4. Current state — evidence-based snapshot
 
 ### Repository and integration
 
@@ -51,7 +62,7 @@ The commercial objective is verified accepted work and actual received revenue w
 - Current safe execution decision: run scripts offline only when no external dependencies are declared. Do not enable Docker bridge networking and describe it as npm-only; it is not an egress allowlist. Projects requiring external packages remain explicitly blocked until controlled dependency preparation exists.
 - Pipeline integration, accurate report/manifest states, CLI cleanup, regression coverage, and a full-suite run remain to be completed and verified.
 
-## 4. Prioritized execution backlog
+## 5. Prioritized execution backlog
 
 Priority is based on dependency order and risk reduction, not novelty.
 
@@ -168,7 +179,7 @@ Priority is based on dependency order and risk reduction, not novelty.
 - Account for all labor, model, runtime, platform, and payment fees.
 - Report positive or negative unit economics honestly; no revenue guarantee.
 
-## 5. Multi-PR integration checkpoint
+## 6. Multi-PR integration checkpoint
 
 The following is a coordination snapshot, not an approval to merge:
 
@@ -184,20 +195,20 @@ The following is a coordination snapshot, not an approval to merge:
 
 Before any PR merge: verify exact head SHA, base SHA, changed-file overlap, current CI, local worktree status, and regression impact. Historical green checks are not sufficient.
 
-## 6. Immediate execution queue
+## 7. Immediate execution queue
 
 1. Finish and validate the current local Node QA integration; preserve the local worktree and publish only after a local status/diff checkpoint.
 2. Complete the PR integration DAG audit, including #5–#30, and decide the smallest safe integration batches.
-3. Integrate repository-intelligence and deterministic QA contracts with actual pipeline results.
+3. Strengthen the primary Autonomous Engineering Agent: Repository Intelligence, deterministic project-aware QA, sandbox hardening, and evidence-backed execution.
 4. Make the independent reviewer operational and connect it to the pipeline.
-5. Implement the bounded repair loop.
-6. Build a benchmark baseline before model-routing optimization.
-7. Add the Qwen/DeepSeek comparative workflow and then the provider-neutral gateway.
-8. Advance the economic engine and event-based ledger with real outcome data.
-9. Add durable orchestration before cloud/always-on execution.
-10. Expand connectors and multi-agent execution only after the core gates pass.
+5. Implement the bounded repair loop and reliable delivery package.
+6. Build a benchmark baseline before model-routing optimization; add the Qwen/DeepSeek comparative workflow and then the provider-neutral gateway.
+7. Add durable orchestration and recovery before cloud/always-on execution.
+8. In parallel only where it does not slow the core, validate commercial demand and improve the secondary Opportunity & Revenue Engine: opportunity scoring, lifecycle ledger, and verified payout evidence.
+9. Expand connectors and multi-agent execution only after the core reliability/security gates pass.
+10. Prove customer value and unit economics with real accepted work and verified receipts; revise the commercial path based on measured evidence.
 
-## 7. Definition of done and status protocol
+## 8. Definition of done and status protocol
 
 Every backlog item must have:
 - an owner/role, priority, dependencies, scope, and explicit non-goals;
@@ -214,7 +225,7 @@ A task moves to **verified** only after its acceptance criteria and required tes
 
 When a new product/engineering idea is accepted, record it here (or as a linked GitHub issue) with its rationale, priority, dependency, and acceptance criteria before starting unrelated work. Update this tracker when scope or evidence changes. Keep this file as the durable cross-conversation memory of the project.
 
-## 8. Explicit non-goals for the current stage
+## 9. Explicit non-goals for the current stage
 
 - No autonomous bidding, claiming, messaging, external submission, merge, payment, or wallet signing.
 - No unrestricted network access from task execution.
