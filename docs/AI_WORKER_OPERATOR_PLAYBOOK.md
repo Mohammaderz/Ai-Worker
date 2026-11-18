@@ -1,6 +1,6 @@
 # AI-Worker Operator Playbook
 > Persistent handoff and operating instructions for future ChatGPT sessions.
-> Last verified: 2026-11-14. Treat GitHub state and fresh tool results as authoritative; this document is a checkpoint, not proof that later actions happened.
+> Last verified: 2026-11-18. Treat GitHub state and fresh tool results as authoritative; this document is a checkpoint, not proof that later actions happened.
 
 ## 1. Mission
 Build and operate a safe, increasingly autonomous software-work income system. Discover legitimate paid software tasks, evaluate their real economics and risks, prepare code, run tests in isolation, and package deliverables. The user's initial milestone is the first **actually received** payment (even $1); longer-term aspirations include repeatable monthly income of $100–$200 or more. These are goals, not guarantees.
@@ -36,11 +36,11 @@ The user wants minimal manual work. The assistant should do research, coding, te
 - URL: https://github.com/Mohammaderz/AI-Worker/pull/5
 - Title: Expand safe marketplace discovery and repository QA
 - Head branch: `feat/repository-intelligence-qa-profile`
-- Head SHA last verified: `dd85a7aa8d24521b16e494e68814466e0255bada`
+- Head SHA last verified: `0df6b02765632c57fa7444f0185f01b1661b54bc`
 - State: open; ready for review (not draft); not merged.
 - `main` remains untouched by PR #5.
-- Last verified GitHub Actions run for that head: run #313, https://github.com/Mohammaderz/AI-Worker/actions/runs/43614437909
-- Result: success; pytest 90 passed; macOS bootstrap shell syntax; Python 3.11 and Node 22 sandbox image builds; Node/TypeScript transpilation smoke test; network-isolated Python smoke test; sandboxed patch-application smoke test.
+- Last verified GitHub Actions run for that head: run #396, https://github.com/Mohammaderz/Ai-Worker/actions/runs/43686811383
+- Result: success on exact head; pytest 91 passed; macOS bootstrap shell syntax; Python and Node sandbox image builds; Node/TypeScript transpilation smoke test; network-isolated execution smoke test; sandboxed patch-application smoke test.
 - Recheck PR, head SHA, branch, CI and review status before continuing. New commits may have changed all of these.
 
 ### Features already on main before PR #5
@@ -210,3 +210,51 @@ These are reported case studies and platform dashboards, not audited guarantees.
 - Official Olas dashboard figures are aggregate ecosystem totals and may include activity from many agents and payment rails.
 - Jobbi counts are a changing index snapshot; reward listings are not cash flow.
 - Recheck source terms, APIs, fee schedules, payout rules, and current figures before implementation or any user commitment.
+
+
+## 12. Live repository and economics audit (2026-11-18)
+This section supersedes earlier PR/CI snapshots above where values differ.
+
+### Verified GitHub state
+- Repository default branch is still `main`; current `main` SHA is `6f89b6dca43ba635e53ec9b2281a7e03814034fa`. No audited PR has been merged; `main` is unchanged.
+- Open PR queue: #5–#30 (26 open PRs). This is not an integration-ready state; do not bulk-merge or create more small stacked PRs.
+- **PR #5** remains open and ready for review, base `main`, head `0df6b02765632c57fa7444f0185f01b1661b54bc`. Exact-head run #396 succeeded; `pytest -q`: 91 passed.
+- **PR #6** remains open and draft, base `main`, head `bcf9bd6371a82e20b478fb96aa762ec1a01971b3`. Exact-head run #44309404263 succeeded; `pytest -q`: 94 passed; Docker Python/Node image builds and all sandbox smoke steps passed.
+  - Commit `ea347ca85cd10ba93836024ec0be7263b8cd3478` removed the unsupported daily $5–$10 target from the PR #6 README.
+  - Commit `bcf9bd6371a82e20b478fb96aa762ec1a01971b3` corrected source hourly economics to include unpaid/rejected task hours when time coverage is complete.
+- **PR #7** remains open and draft, stacked on #6. Its base SHA `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b` is behind current PR #6 head `bcf9bd6...`; GitHub currently reports it not mergeable. Synchronize only with a normal forward update and rerun exact-head CI; do not force-push.
+- **PR #8** remains open and ready for review, targeting `main`; its previously recorded exact-head run #389 passed. Recheck before any integration.
+- **PR #9** remains open/draft, targeting `main`; current tracker branch head `acf41f3d02d6a0d8b2effaad056fc3448b3a7bd5`; exact-head run #597 passed.
+- **PR #10** remains open/draft, stacked on PR #5 at base SHA `0df6b02765632c57fa7444f0185f01b1661b54bc`; head `f2ed29b08b53537e31037efd6699a9c09170fefc`; exact-head run #596 passed.
+- **PR #11** is based on `product/competitive-roadmap`, which is not represented by a parent PR in the current open queue. Resolve its ancestry before integrating it.
+- **PRs #12–#30** form a long reviewer/security-analysis chain. Latest current-head CI runs checked for these PRs succeeded; some intermediate historical commits had failed attempts. #28 and #29 are parallel children of #27; #30 extends #29. Do not bulk-retarget or merge this chain.
+- Changed-file overlap is material: #5/#6 overlap in README, architecture, CLI and storage; #6/#7 overlap in CLI and storage; #8/#11 overlap in CLI, pipeline and pipeline tests; #10/#11 overlap in architecture and reviewer code. Review each combined diff, not each PR in isolation.
+- `docs/PROJECT_BRIEF.md` is absent from `main` and PR #5 (GitHub 404). The more complete `docs/MASTER_EXECUTION_TRACKER.md` is currently on PR #9's branch, not `main`.
+- The local Mac Node-QA work described in the tracker remains inaccessible in this runtime. Do not overwrite it, reset it, or claim it was published or tested here.
+
+### Source economics correction on PR #6
+- Source-level realized hourly ranking previously used only hours on paid tasks, excluding hours spent on rejected/unpaid tasks. That could overstate a source's productivity.
+- The updated ledger now reports:
+  - all-task net receipts per tracked hour, including paid and unpaid/rejected tasks, only when every tracked task has an explicit `actual_hours` value;
+  - conditional net receipts per paid-task hour as a separate diagnostic;
+  - hours-recorded count and coverage.
+- `actual_hours=0` is now valid so the operator can explicitly record that a tracked task consumed no time. Missing hours are not silently interpreted as zero.
+- Source-priority adjustments now require the existing sample threshold (at least 3 submissions and 2 payments) **and** complete hours coverage, and use the all-task metric. Incomplete time data produces no adjustment.
+- Exact-head CI for PR #6 passed 94 tests and all configured sandbox smoke checks. This verifies the code in GitHub Actions, not a live paid task or the Mac runtime.
+- Important limitation: current `net_received` is gross actually received minus fees manually recorded in the ledger. Model, local compute, infrastructure, electricity, and other unrecorded costs are not yet included; this is not full business profit or proof of positive unit economics.
+
+### TryBounty normalization decision — rechecked against official OpenAPI
+- Official sources: https://docs.trybounty.ai/agents/raw-interface/ and https://api.trybounty.ai/openapi.json.
+- The current list-item schema contains no public task URL and no Jobbi-style payout evidence grade. Do not fabricate a public URL or assign a grade without explicit evidence.
+- `claim` flow means the owner funded a fixed payout; `bid` flow has `payout_cents=null` until a bid is accepted. `budget_cents` is only a pricing guide; deprecated `amount_cents` is buyer all-in price including platform fee and is not agent revenue. Test Bounties move no money.
+- Keep the current adapter discovery-only. Do not coerce bid budgets into fixed rewards or push Bounty records through the strict `Gig` gate until the canonical model can represent source references, funding evidence, bid-required pricing, acceptance evidence, and operator payout readiness separately.
+- Keep operator payout readiness unknown until the actual account's Stripe/country/KYC path is verified. No wallet seed phrase or private key is needed or permitted.
+
+### Next safe engineering actions
+1. Resolve the PR dependency DAG and preserve the inaccessible local Mac work before attempting integration.
+2. Synchronize PR #7 to the current PR #6 head without force-push, then verify exact-head CI.
+3. Design a typed opportunity assessment with separate funding state, operator payout readiness, evidence provenance/expiry, and `needs_review`; do not force direct-source records into the existing Jobbi `Gig` shape.
+4. Extend cost accounting beyond recorded platform/payment fees before calling the hourly metric full net profit.
+5. Keep external claims, bids, messages, submissions, deployments, merges to `main`, spending and payment actions behind explicit user approval.
+
+No real task has been submitted, accepted or paid as a result of this audit.
