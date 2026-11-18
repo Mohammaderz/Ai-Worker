@@ -6,7 +6,7 @@ from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
 from ai_worker.report import write_report
-from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
+from ai_worker.sandbox import DEFAULT_IMAGE, DEFAULT_NODE_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
@@ -60,7 +60,7 @@ def main() -> int:
     pipeline.add_argument("--scratch-root", default=".ai-worker/sandboxes")
     pipeline.add_argument("--output-root", default=".ai-worker/proposals")
     pipeline.add_argument("--image", default=DEFAULT_IMAGE)
-    pipeline.add_argument("--node-image", default="ai-worker-sandbox:node22")
+    pipeline.add_argument("--node-image", default=DEFAULT_NODE_IMAGE)
     pipeline.add_argument("--model")
     pipeline.add_argument("--reviewer-model", help="Separate local Ollama model used for independent patch review")
     pipeline.add_argument("--timeout", type=int, default=600)

@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-DEFAULT_IMAGE = "ai-worker-sandbox:py311"
-DEFAULT_NODE_IMAGE = "ai-worker-sandbox:node22"
+DEFAULT_IMAGE = "ai-worker-sandbox:py311-alpine-nopip-20261119"
+DEFAULT_NODE_IMAGE = "ai-worker-sandbox:node22-nonpm-esbuild0281-stagea-20261118"
 MAX_OUTPUT_CHARS = 20_000
 MAX_OUTPUT_BYTES = 1_000_000
 

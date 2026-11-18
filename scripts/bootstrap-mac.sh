@@ -35,10 +35,10 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 
 printf '\nBuilding the isolated Python task image...\n'
-docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311-alpine-nopip-20261119 .
 
 printf '\nBuilding the isolated Node task image...\n'
-docker build -f sandbox/Dockerfile.node -t ai-worker-sandbox:node22 .
+docker build -f sandbox/Dockerfile.node -t ai-worker-sandbox:node22-nonpm-esbuild0281-stagea-20261118 .
 
 mkdir -p .ai-worker/sandboxes .ai-worker/proposals data reports
 

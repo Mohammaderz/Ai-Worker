@@ -33,7 +33,7 @@ pytest -q
 ai-worker scan
 
 # Build the disposable execution image once
-docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311 .
+docker build -f sandbox/Dockerfile -t ai-worker-sandbox:py311-alpine-nopip-20261119 .
 ~~~
 
 ## Optional local AI model
@@ -60,6 +60,8 @@ ai-worker pipeline --url https://github.com/OWNER/REPO/issues/123
 ~~~
 
 The current automatic coding path supports gigs whose original listing URL is a canonical public GitHub issue; other board URLs remain visible in the shortlist but need a dedicated adapter or manual issue URL. Python patches receive compileall and detected pytest checks. JavaScript/TypeScript patches receive isolated esbuild syntax transpilation; dependency-aware Node test suites are not run yet because project dependencies are not fetched from untrusted manifests. The pipeline never claims a task, sends a message, commits, pushes, opens a PR or submits work. High-risk plans, unresolved questions and blockers stop before patch application. Python tests run offline in the Docker sandbox; missing project dependencies are reported as test failures rather than installed from untrusted task instructions. Sandbox stdout/stderr capture is capped at 1 MiB per run. The writable workspace does not yet have a per-run disk quota, so this Docker setup is not a production multi-tenant security boundary.
+
+Node QA support contract: automated checks execute only the root `package.json` `test` and `build` scripts, via the Node built-in `node --run` inside an npm-free sandbox. No dependencies are installed in the sandbox. Projects are excluded from automated Node checks when they declare external dependencies (unsupported without a validated npm lockfile, skipped when one is present), use npm workspaces, require an installer other than npm, or contain a `.npmrc`. Because `node --run` is not npm, npm lifecycle hooks (`prebuild`/`postbuild`, `pretest`/`posttest`), `npm_*` environment variables, forwarding of extra command arguments, and npm's exact exit-code values are not guaranteed; the pipeline treats a non-zero exit code as a failure. Projects that need those behaviours require a separate reviewed execution path.
 
 ## Track real outcomes and payouts
 The local outcome ledger records progress only after you manually claim or submit work. Only a manually recorded `paid` status with the actual received amount counts as income; listed rewards, accepted work and pending payments are not counted as earnings.

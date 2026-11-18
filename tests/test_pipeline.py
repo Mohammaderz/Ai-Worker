@@ -1457,8 +1457,11 @@ def test_pipeline_records_node_project_without_installing_dependencies(
     assert result.node_project["has_build_script"] is True
 
     assert commands[0][0] == "esbuild"
-    assert commands[1] == ["npm", "--offline", "--ignore-scripts", "run", "test"]
-    assert commands[2] == ["npm", "--offline", "--ignore-scripts", "run", "build"]
+    # The hardened Node image intentionally ships without npm/npx; scripts are
+    # executed with the Node built-in runner available in Node 22.23.5.
+    assert commands[1] == ["node", "--run", "test"]
+    assert commands[2] == ["node", "--run", "build"]
+    assert all(command[0] != "npm" for command in commands)
     assert network_settings == [False, False, False]
     assert result.node_test_exit_code == 0
     assert result.node_build_exit_code == 0

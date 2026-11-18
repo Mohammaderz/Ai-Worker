@@ -1143,7 +1143,7 @@ def _run_pipeline_impl(
                                 if node_project_info.has_test_script:
                                     node_result = run_in_sandbox(
                                         workspace,
-                                        ["npm", "--offline", "--ignore-scripts", "run", "test"],
+                                        ["node", "--run", "test"],
                                         scratch_root=scratch,
                                         image=node_image,
                                         timeout_seconds=min(timeout, 600),
@@ -1165,7 +1165,7 @@ def _run_pipeline_impl(
                                     if node_project_info.has_build_script:
                                         node_result = run_in_sandbox(
                                             workspace,
-                                            ["npm", "--offline", "--ignore-scripts", "run", "build"],
+                                            ["node", "--run", "build"],
                                             scratch_root=scratch,
                                             image=node_image,
                                             timeout_seconds=min(timeout, 600),

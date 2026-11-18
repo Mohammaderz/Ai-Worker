@@ -1424,7 +1424,7 @@ def apply_patch_in_sandbox(
     workspace: str | Path,
     *,
     scratch_root: str | Path,
-    image: str = "ai-worker-sandbox:py311",
+    image: str = "ai-worker-sandbox:py311-alpine-nopip-20261119",
     timeout_seconds: int = 120,
 ) -> PatchApplyResult:
     """Check, then apply a text patch in a disposable workspace using isolated Docker."""
