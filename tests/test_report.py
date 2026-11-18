@@ -5,6 +5,9 @@ def test_report_discloses_incomplete_all_task_hours_and_paid_task_rate(tmp_path)
     source_history = [{
         "source": "board",
         "acceptance_rate": 0.5,
+        "submitted_tasks": 2,
+        "accepted_tasks": 1,
+        "paid_tasks": 1,
         "net_received": 20.0,
         "net_per_tracked_hour": None,
         "net_per_paid_hour": 12.0,
