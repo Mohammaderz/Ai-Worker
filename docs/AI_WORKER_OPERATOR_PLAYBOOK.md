@@ -265,3 +265,47 @@ No real task has been submitted, accepted or paid as a result of this audit.
 - This checkpoint itself is another documentation-only PR #5 branch update. PR #10 still has base SHA `0df6b02765632c57fa7444f0185f01b1661b54bc`, so it will remain behind the current PR #5 branch until synchronized. **Do not add further commits to PR #5 until PR #10's base is synchronized**, unless a critical correction is required.
 - PR #9's tracker refresh is documentation-only commit `ad77787d2c55cffea1c7f5c196c9d92f7cb94ec7`; no CI run was observed for that docs-only commit.
 - PR #6 remains at code head `bcf9bd6371a82e20b478fb96aa762ec1a01971b3` with successful run #44309404263 (94 passed). PR #7 remains behind that base and not mergeable.
+
+## 14. Live verification and CI repair — 2026-11-18 13:16 UTC
+
+This section supersedes earlier PR #5/#6 head and CI snapshots above. Repository state was read from the live GitHub API; current main remains unchanged.
+
+### Current repository and PR state
+- Repository canonical name is Mohammaderz/Ai-Worker (GitHub displays Ai-Worker); default branch is main.
+- main SHA remains 6f89b6dca43ba635e53ec9b2281a7e03814034fa; no PR was merged during this run.
+- There are 26 open PRs (#5–#30). Avoid creating more small PRs or bulk merging.
+- PR #5: open, ready for review, base main, head 48637c0e2a256dac2105f589abd19f9b840008a3, mergeable/clean at last check. Exact-head GitHub Actions runs #608 (push) and #609 (pull request) both succeeded; pytest -q reported 91 passed and all configured bootstrap, Docker build, Node/TypeScript, isolated execution and patch-application smoke steps succeeded. PR body validation text was updated to these exact current runs.
+- PR #6: open, draft, base main, head 784477214161ca5af5512998baa79bfdedb37e1f, mergeable/clean at last check. A new report-economics test initially failed because its fixture omitted submitted_tasks, accepted_tasks, and paid_tasks, all required by write_report. This was a test-fixture contract defect, not a production calculation failure. Commit 784477214161ca5af5512998baa79bfdedb37e1f added the missing fields. Exact-head runs #616 (push) and #617 (pull request) both succeeded; each reported 95 passed and all configured sandbox/bootstrap smoke steps passed. PR body validation text was updated.
+- PR #7: open, draft, stacked on PR #6, but its base SHA 9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b is behind PR #6 current head 784477214161ca5af5512998baa79bfdedb37e1f. Do not merge; synchronize with a normal forward update and rerun exact-head CI before review.
+- PR #8: open and ready for review, targets main, head cae31e4945b70123e10ee4132aa3e54705432ca9; recheck its own latest head/CI before integration.
+- PR #9: open, draft, targets main, head bf549c19ce2013fa26d5e96a7e87366eb363612b; exact-head run #613 (PR) and #612 (push) succeeded. Its branch contains docs/MASTER_EXECUTION_TRACKER.md; this file is not on main.
+- PR #10: open, draft, stacked on PR #5 but based on older PR #5 SHA 0df6b02765632c57fa7444f0185f01b1661b54bc; current PR #5 head is 48637c0e2a256dac2105f589abd19f9b840008a3. GitHub reports PR #10 dirty/not mergeable. Plan synchronization before further PR #5 branch updates; do not force-push.
+- PR #11 targets existing branch product/competitive-roadmap, which is not represented by a separate open parent PR in the current queue. Inspect its ancestry before integration.
+- PRs #12–#30 are a long, mostly draft security-review chain. Keep the dependency graph explicit; do not bulk-retarget or merge it.
+- PR #5 and #6 overlap in README.md, docs/ARCHITECTURE.md, src/ai_worker/cli.py, and src/ai_worker/storage.py. Review their combined diff before either is merged to main.
+- docs/PROJECT_BRIEF.md is absent (404) on main and the PR #5 branch. docs/MASTER_EXECUTION_TRACKER.md exists on PR #9's branch only. The local Mac changes described in that tracker remain inaccessible in this runtime; preserve them and do not claim they are published or tested.
+
+### TryBounty official documentation recheck (2026-11-18)
+Official references:
+- https://docs.trybounty.ai/agents/raw-interface/
+- https://docs.trybounty.ai/agents/sdk/
+- https://docs.trybounty.ai/agents/how-it-works/
+- https://api.trybounty.ai/openapi.json
+
+Verified protocol semantics:
+- GET /v1/agent/bounties?status=open is read-only discovery. Pagination must follow has_more and next_cursor; honor Retry-After on HTTP 429. Documentation suggests polling about every 30 seconds for a connected live Agent, but this repository's CLI adapter is manually invoked and is not a live event runtime.
+- payout_cents is the Agent payout when work is accepted and settled. It is null while a Bounty is taking bids, until the owner accepts a bid.
+- budget_cents is an optional price guide, not a guaranteed payout or cap. Deprecated amount_cents is the buyer all-in amount including platform fee and must not be used as Agent earnings.
+- flow=claim means the owner funded a fixed payout and an eligible Agent may claim; flow=bid means the Agent proposes a price and the owner chooses a bid. Listing alone does not claim or bid.
+- Test Bounties (test=true) move no money and must not count as revenue.
+- The detail endpoint is needed to inspect current terms, attachments, bid/claim state and version before any action. The current adapter is discovery-only and does not perform that detail/action lifecycle.
+- Payout setup can be completed later; earnings may be held until the Agent Operator completes payout setup. Stripe payout availability and the user's account/country/KYC readiness remain account-specific and unverified. No wallet seed phrase or private key is needed or permitted.
+- Keep API keys in a server-side secret store; never include them in code, prompts, logs, reports or artifacts.
+
+### Current blockers and next actions
+1. Do not merge PR #5 or #6 without explicit user approval and a combined-diff review because both target main and overlap.
+2. Synchronize PR #7 to PR #6 exact current head with a non-force update, then verify tests and CI.
+3. Plan PR #10 synchronization to the current PR #5 base before further PR #5 branch updates; inspect conflicts rather than force-pushing.
+4. Keep TryBounty discovery-only until a canonical opportunity model can independently represent source reference, funding state/evidence, claim-vs-bid pricing, acceptance evidence, operator payout readiness, and evidence provenance/expiry. Do not coerce budget_cents into a guaranteed Gig.reward_amount, invent a listing URL, or assign a payout grade without evidence.
+5. Continue the P0 engineering-core priorities in docs/MASTER_EXECUTION_TRACKER.md where applicable: finish project-aware Node QA safely, harden the sandbox threat model, and preserve inaccessible local Mac work.
+6. Do not report income, acceptance, or successful submission based on listing, test-bounty, or CI evidence. No task was claimed, bid on, submitted, accepted or paid in this run.
