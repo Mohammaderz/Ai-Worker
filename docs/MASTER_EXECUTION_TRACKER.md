@@ -327,3 +327,13 @@ This section records the final branch state after the documentation refreshes ab
 - PR #9's tracker refresh commit is `ad77787d2c55cffea1c7f5c196c9d92f7cb94ec7`; exact-head workflow #607 completed successfully. This tracker update will itself advance PR #9; the live PR head remains authoritative.
 - The documentation-only PR #5/PR #9 commits do not change the underlying code results. Do not mistake their CI state for a new code-validation run, and do not infer anything about the inaccessible Mac working tree.
 - `main` remains at `6f89b6dca43ba635e53ec9b2281a7e03814034fa`; no merge, external task submission, acceptance or payment occurred.
+
+
+## 12. Final CI and synchronization status — 2026-11-18
+Live status supersedes the in-progress observations in section 11:
+- PR #5 documentation head `48637c0e2a256dac2105f589abd19f9b840008a3`: workflow #609 completed successfully; pytest 91 passed and the Python/Node sandbox build and smoke steps all succeeded. Its code-bearing parent `0df6b027...` is unchanged by the documentation-only commits.
+- PR #9 tracker head `431d6428ddd0ac5c995381228917272f4668c762`: workflow #611 completed successfully; pytest 74 passed and all configured sandbox steps succeeded.
+- PR #6 code head `bcf9bd6371a82e20b478fb96aa762ec1a01971b3`: workflow #44309404263 completed successfully; pytest 94 passed and all configured sandbox steps succeeded.
+- The live PR metadata still reports #7 and #10 as not mergeable because their base SHAs lag their respective base branches. The connected GitHub actions available in this runtime support reading PRs and updating PR metadata, but do not expose the GitHub “update branch” operation. No local Git/Mac runtime is attached. Do not simulate a merge or force-update refs through ad hoc tree writes; preserve the branches until a supported non-force synchronization workflow is available.
+- The prior playbook note that no CI was observed for the documentation refreshes has been superseded by the live runs #609 and #611 above. The playbook itself was not changed again to avoid advancing PR #5's base further while PR #10 is behind.
+- `main` remains unchanged at `6f89b6dca43ba635e53ec9b2281a7e03814034fa`. No external task was claimed, bid, submitted, accepted or paid.
