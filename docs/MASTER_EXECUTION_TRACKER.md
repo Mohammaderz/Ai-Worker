@@ -315,3 +315,15 @@ Rechecked official documentation:
 6. No merge to `main`, external bid/claim/message/submission, spend, deployment or financial transaction without the user's explicit approval.
 
 No external task was submitted, accepted or paid during this audit.
+
+
+## 11. Post-checkpoint branch movement — 2026-11-18
+This section records the final branch state after the documentation refreshes above; re-read live PR metadata before any future action.
+
+- PR #5's branch has advanced to `48637c0e2a256dac2105f589abd19f9b840008a3` through documentation-only playbook commits. The last code-bearing head remains `0df6b02765632c57fa7444f0185f01b1661b54bc`, whose exact-head CI passed 91 tests. Latest documentation-head workflow #609 is still in progress at this checkpoint: pytest and Python image steps passed; Node sandbox image build was still running. Do not describe the documentation head's full CI as green until the run completes.
+- PR #10 still has base SHA `0df6b02765632c57fa7444f0185f01b1661b54bc`, behind PR #5's current head `48637c0e...`; GitHub reports PR #10 not mergeable. Do not add more commits to PR #5 until PR #10 is synchronized, except for a critical correction.
+- PR #6 remains at `bcf9bd6371a82e20b478fb96aa762ec1a01971b3`; exact-head CI #44309404263 is fully successful (94 pytest tests and all configured sandbox smoke steps).
+- PR #7 still records base SHA `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b`, behind PR #6's current head `bcf9bd6...`; GitHub reports PR #7 not mergeable. Synchronize only with a normal forward update and rerun CI.
+- PR #9's tracker refresh commit is `ad77787d2c55cffea1c7f5c196c9d92f7cb94ec7`; exact-head workflow #607 completed successfully. This tracker update will itself advance PR #9; the live PR head remains authoritative.
+- The documentation-only PR #5/PR #9 commits do not change the underlying code results. Do not mistake their CI state for a new code-validation run, and do not infer anything about the inaccessible Mac working tree.
+- `main` remains at `6f89b6dca43ba635e53ec9b2281a7e03814034fa`; no merge, external task submission, acceptance or payment occurred.
