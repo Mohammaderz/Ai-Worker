@@ -72,7 +72,7 @@ ai-worker ledger record --gig-id SOURCE:NATIVE_ID --status paid --gross-received
 ai-worker ledger report
 ~~~
 
-Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate, realized net/hour from paid-task hours, and average/median payout latency.
+Hours are cumulative totals for that task, not per-command increments. The report separates gross received, fees, net received, acceptance rate, realized net per tracked task hour (including unpaid/rejected attempts, shown only when hours are recorded for every tracked task), conditional net per paid-task hour (shown only when every paid task has recorded hours), separate all-task and paid-task hours coverage, and average/median payout latency. Record cumulative `--actual-hours` for every tracked task; use `--actual-hours 0` when no time was spent. Missing hours are not treated as zero. When updating a task, omitting `--fees` preserves the previously recorded fee; pass `--fees 0` only when you explicitly mean to set the fee to zero. It also breaks results down by source. Once a source has at least 3 submitted tasks, 2 actual payments, and complete hours coverage, its observed acceptance rate, all-task net/hour and payout delay can make a small ranking-only adjustment (capped at ±8 points) to future scans. This never bypasses eligibility or safety filters; small samples or incomplete time data do not influence ranking.
 
 ## Example issue workflow
 ~~~bash
@@ -98,6 +98,6 @@ The generated patch is only a proposal. Review it and run the project's own test
 ## Scheduled opportunity scans
 After this PR is merged into the default branch, a read-only GitHub Actions workflow will scan every six hours and upload a report plus SQLite ledger as a 14-day artifact. It can also be triggered manually from GitHub Actions. It never claims tasks or contacts clients.
 
-Daily $5-$10 is a target, not a guarantee. Some days may have no suitable tasks; acceptance and payout depend on the original board and maintainer.
+There is no verified daily-income estimate yet. The first commercial milestone is a payment actually received; listed rewards and escrowed amounts are opportunities, not income.
 
-See docs/ARCHITECTURE.md and sandbox/README.md.
+See docs/ARCHITECTURE.md, docs/MARKET-INTELLIGENCE-2026-11-14.md and sandbox/README.md.

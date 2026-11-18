@@ -192,3 +192,26 @@ def test_cli_pipeline_refreshes_and_resolves_jobbi_gig(monkeypatch, capsys, tmp_
     assert captured["kwargs"]["reward_amount"] == 25
     assert captured["kwargs"]["currency"] == "USD"
     assert "ready_for_human_review" in capsys.readouterr().out
+
+
+
+def test_cli_ledger_record_omitted_fees_remains_unspecified(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    captured = {}
+    fake_db = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(cli, "connect", lambda path: fake_db)
+
+    def fake_record(db, gig_id, status, **kwargs):
+        captured.update(gig_id=gig_id, status=status, **kwargs)
+
+    monkeypatch.setattr(cli, "record_outcome", fake_record)
+    monkeypatch.setattr(cli, "outcome_summary", lambda db: {})
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ai-worker", "ledger", "record", "--gig-id", "board:task-1", "--status", "claimed"],
+    )
+
+    assert cli.main() == 0
+    assert captured["fees"] is None
+    capsys.readouterr()

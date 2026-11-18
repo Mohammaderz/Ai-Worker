@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
+from ai_worker.economics import source_priority_adjustments
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
 from ai_worker.report import write_report
@@ -10,7 +11,7 @@ from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
-from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
+from ai_worker.storage import connect, outcome_summary, record_outcome, source_performance, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
 
@@ -69,7 +70,7 @@ def main() -> int:
     ])
     ledger_record.add_argument("--actual-hours", type=float)
     ledger_record.add_argument("--gross-received", type=float)
-    ledger_record.add_argument("--fees", type=float, default=0.0)
+    ledger_record.add_argument("--fees", type=float, default=None)
     ledger_record.add_argument("--notes", default="")
     ledger_record.add_argument("--db", default="data/ai_worker.sqlite3")
     ledger_report = ledger_sub.add_parser("report")
@@ -231,15 +232,24 @@ def main() -> int:
         db = connect(args.db)
         try:
             upsert_gigs(db, gigs)
+            history = source_performance(db)
+            adjustments = source_priority_adjustments(history)
             ranked, rejected = [], 0
             for gig in gigs:
                 ok, score, reasons = evaluate(gig, args.min_reward)
                 if ok:
+                    adjustment = adjustments.get(gig.source, 0.0)
+                    if adjustment:
+                        score = round(score + adjustment, 1)
+                        reasons.append(
+                            f"Historical source performance adjustment: {adjustment:+.1f} "
+                            "(ranking only; based on actual submissions and payments)"
+                        )
                     ranked.append((gig, score, reasons))
                 else:
                     rejected += 1
             ranked.sort(key=lambda row: row[1], reverse=True)
-            report = write_report(ranked, args.output)
+            report = write_report(ranked, args.output, source_history=history)
         finally:
             db.close()
         print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")

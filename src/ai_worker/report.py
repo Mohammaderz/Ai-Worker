@@ -4,7 +4,11 @@ from pathlib import Path
 from ai_worker.models import Gig
 
 
-def write_report(rows: list[tuple[Gig, float, list[str]]], output: str | Path) -> Path:
+def write_report(
+    rows: list[tuple[Gig, float, list[str]]],
+    output: str | Path,
+    source_history: list[dict] | None = None,
+) -> Path:
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -15,12 +19,52 @@ def write_report(rows: list[tuple[Gig, float, list[str]]], output: str | Path) -
         "> Listed rewards are not earnings. Verify original-board terms before starting.",
         "> Only tasks with escrowed USD/USDC rewards and B-grade-or-better payout evidence pass the current gate.",
         "",
+        "## Realized source economics",
+        "",
+        "This section uses only manually recorded submissions and actual payments. It does not treat advertised rewards as income.",
+        "",
     ]
+    if not source_history:
+        lines += ["No completed source history yet. Record task outcomes and actual payments to build evidence.", ""]
+    else:
+        for item in source_history:
+            acceptance = (
+                f"{item['acceptance_rate']:.0%}"
+                if item["acceptance_rate"] is not None else "n/a"
+            )
+            tracked_hour = (
+                f"USD {item['net_per_tracked_hour']:.2f}/tracked hour"
+                if item.get("net_per_tracked_hour") is not None else "n/a (incomplete hours or zero total hours)"
+            )
+            paid_hour = (
+                f"USD {item['net_per_paid_hour']:.2f}/paid-task hour"
+                if item.get("net_per_paid_hour") is not None else "n/a"
+            )
+            paid_hours_coverage = (
+                f"{item['paid_hours_coverage']:.0%}"
+                if item.get("paid_hours_coverage") is not None else "n/a (no paid tasks)"
+            )
+            lines += [
+                f"### {item['source']}",
+                "",
+                f"- Tracked / submitted / accepted / paid: {item['tracked_tasks']} / {item['submitted_tasks']} / {item['accepted_tasks']} / {item['paid_tasks']}",
+                f"- Observed acceptance rate: {acceptance}",
+                f"- Actual net received: ${item['net_received']:.2f}",
+                f"- Hours recorded: {item['hours_recorded_tasks']}/{item['tracked_tasks']} tasks ({item['hours_coverage']:.0%})",
+                f"- Realized net per tracked task hour (includes unpaid/rejected attempts): {tracked_hour}",
+                f"- Paid-task hours recorded: {item.get('paid_hours_recorded_tasks', 0)}/{item['paid_tasks']} paid tasks ({paid_hours_coverage})",
+                f"- Conditional net per paid-task hour: {paid_hour}",
+                f"- Average payout delay: {item['average_payout_days'] if item['average_payout_days'] is not None else 'n/a'} days",
+                f"- Evidence confidence: {item['confidence']}",
+                f"- Guidance: {item['guidance']}",
+                "",
+            ]
+    lines += ["## Current opportunities", ""]
     if not rows:
         lines += ["No gigs passed the current conservative filters.", ""]
     for i, (gig, score, reasons) in enumerate(rows, 1):
         lines += [
-            f"## {i}. {gig.title}",
+            f"### {i}. {gig.title}",
             "",
             f"- Gig ID: {gig.id}",
             f"- Score: {score}",
