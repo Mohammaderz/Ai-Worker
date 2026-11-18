@@ -269,3 +269,49 @@ Commit `437cd4b6764ad755d614a8d3a14ab56c7b7a87e4` changes omitted fees from impl
 3. Separate task funding/escrow evidence from operator payout-account readiness in the opportunity model.
 4. Add a typed needs-review state for direct-source records whose public URL or payout readiness is unknown; do not force them into the existing strict `Gig` path.
 5. Continue project-aware Node QA and sandbox hardening only after preserving/checkpointing the inaccessible local Mac work.
+
+
+## 10. Live integration and economics audit — 2026-11-18
+This snapshot supersedes the 2026-11-17 checkpoint above where values differ. Live GitHub state was rechecked on 2026-11-18.
+
+### Repository and PR DAG
+- Default branch remains `main` at `6f89b6dca43ba635e53ec9b2281a7e03814034fa`; no open PR in the audited queue is merged.
+- PRs #5–#30 are all open (26 total). This is a dependency/integration queue, not a release-ready branch set.
+- #5 targets `main`, ready for review, head `0df6b02765632c57fa7444f0185f01b1661b54bc`; exact-head run #396 passed, including 91 pytest tests and all configured sandbox smoke checks.
+- #6 targets `main`, draft, head `bcf9bd6371a82e20b478fb96aa762ec1a01971b3`; exact-head run #44309404263 passed, including 94 pytest tests and all configured sandbox smoke checks.
+- #6 commit `ea347ca85cd10ba93836024ec0be7263b8cd3478` removes the unsupported daily $5–$10 target from its README.
+- #7 is stacked on #6 but its recorded base SHA `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b` is behind current #6 head `bcf9bd6...`; GitHub reports #7 not mergeable. Synchronize forward without force-push, then rerun CI.
+- #8 targets `main`, ready for review; prior exact-head run #389 passed, but must be rechecked before integration.
+- #9 is a documentation/roadmap PR targeting `main`; head `acf41f3d02d6a0d8b2effaad056fc3448b3a7bd5`; exact-head run #597 passed.
+- #10 is stacked on #5; head `f2ed29b08b53537e31037efd6699a9c09170fefc`; exact-head run #596 passed.
+- #11 is based on `product/competitive-roadmap`, not a parent PR in the current open queue; ancestry is unresolved.
+- #12–#30 form a long reviewer/security-analysis chain. Latest current-head CI checks observed for this chain were successful, but some intermediate historical commits failed. #28 and #29 are siblings from #27; #30 extends #29.
+- Significant changed-file overlap exists: #5/#6 share README, architecture, CLI and storage; #6/#7 share CLI and storage; #8/#11 share CLI, pipeline and pipeline tests; #10/#11 share architecture/reviewer code. Do not merge or retarget in bulk.
+- `docs/PROJECT_BRIEF.md` is absent from `main` and PR #5 (404). This tracker is on PR #9's branch and is not yet on `main`.
+- The local Mac Node-QA work noted previously remains inaccessible here. Preserve it; do not reset, overwrite or claim it was published.
+
+### Verified economics improvement on PR #6
+- Previous source ranking used net receipts divided only by paid-task hours, excluding time spent on rejected/unpaid tasks. That conditional rate could overstate source productivity.
+- PR #6 commit `bcf9bd6371a82e20b478fb96aa762ec1a01971b3` now calculates all-task net receipts per tracked hour, including unpaid/rejected attempts, only when every tracked task has an explicit hours value. It also preserves conditional paid-task net/hour as a separate diagnostic and exposes hours coverage.
+- Zero hours can be explicitly recorded with `--actual-hours 0`; missing hours do not silently become zero. Source-priority adjustment requires at least 3 submissions, 2 payments and 100% hours coverage, and uses all-task net/hour.
+- Exact-head CI run #44309404263 passed 94 tests and the Python/Node sandbox build/smoke sequence.
+- Limitation: the current calculation subtracts only manually recorded fees from actual gross receipts. Model/API/runtime/infrastructure/electricity and other unrecorded costs are not included. It is a cash-net-after-recorded-fees metric, not full profit.
+
+### TryBounty canonicalization constraints
+Rechecked official documentation:
+- Raw API: https://docs.trybounty.ai/agents/raw-interface/
+- OpenAPI 3.1: https://api.trybounty.ai/openapi.json
+- The current Bounty list schema has no public listing URL field and no Jobbi-style payout evidence grade. Do not synthesize a public task URL or infer a grade.
+- Claim-flow Bounties have a funded fixed payout. Bid-flow listings have `payout_cents=null` until an owner accepts a bid; `budget_cents` is only a pricing guide. Deprecated `amount_cents` is buyer all-in price including the platform fee, not agent earnings. Test Bounties move no money.
+- Keep the adapter discovery-only until a canonical opportunity assessment can separate source reference/provenance, fixed funding vs bid-required pricing, acceptance criteria, evidence freshness, and the operator's own payout-account readiness.
+- The user's payout readiness remains unknown until account-specific Stripe/country/KYC requirements are verified; do not request wallet seed phrases or private keys.
+
+### Integration and next actions
+1. Preserve/checkpoint local Mac work before any local branch integration.
+2. Synchronize #7 forward to the current #6 head and rerun exact-head CI.
+3. Build a single reviewed integration DAG for #5, #6, #7, #8, #9, #10 and the #11–#30 chain, including changed-file overlap and regression checks.
+4. Add a typed `needs_review` path and separate funding evidence from operator payout readiness before normalizing Bounty records into the common scorer.
+5. Extend cost accounting beyond recorded platform/payment fees before using the metric as full net profit.
+6. No merge to `main`, external bid/claim/message/submission, spend, deployment or financial transaction without the user's explicit approval.
+
+No external task was submitted, accepted or paid during this audit.
