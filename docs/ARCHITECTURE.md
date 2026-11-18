@@ -16,6 +16,12 @@ The inspect command supports canonical public GitHub issue URLs only. It fetches
 ## Workspace preparation
 The prepare command derives the repository from a validated public GitHub issue URL and performs a shallow HTTPS clone. It disables Git hooks, submodule recursion, LFS smudging, interactive prompts and host-level Git configuration/credentials. Workspaces must be new children of the configured scratch root. Private repositories are not supported by this path.
 
+## Multi-marketplace source discovery
+The Jobbi public read-only feed is the active aggregator adapter. A separate read-only Bounty Agent API adapter can list open Bounties when BOUNTY_AGENT_API_KEY is present; it uses the official bearer-authenticated GET endpoint and paginates using has_more/next_cursor. It distinguishes funded fixed-payout claim work from bid-flow budgets, which are not treated as guaranteed agent earnings. It never performs bids, claims, messages, or submissions. Bounty results are not yet normalized into the Jobbi Gig model or passed through the Jobbi risk/eligibility gate, and cannot be sent to the GitHub coding pipeline. Treat them as a raw discovery list requiring human review. It can expose multiple original boards in one request; `source_report` reports only sources observed in the actual response and separately lists manual-only marketplaces. The CLI supports `ai-worker sources` and repeatable `scan --source` filters. The report also checks every observed listing URL against the exact parser used by the coding pipeline, counting canonical public GitHub issue URLs separately from links that need another adapter. This is measured per listing, not assumed from the marketplace name: an indexed board is not automatically executable. A marketplace listed as manual-only is not a working scraper/API integration. Upwork requires approved API access; Contra automation is restricted; security platforms require scope-specific human review. Bounty requires an Agent API key but documents no deposit, subscription, or API access fee; Stripe payout setup can be completed later, with earnings held until it is ready. Original board terms and payout conditions must be verified because Jobbi is an index, not the payer.
+
+## Repository intelligence and QA discovery
+The `profile` command performs a bounded, symlink-safe inventory of source languages, common manifests, lockfiles and test-like files. It reads only a small bounded `package.json` to report available scripts. It never executes repository code, package scripts, build hooks or dependency installation. Recommended commands from third-party manifests are explicitly marked for manual review. This gives the operator a repository-specific QA map without treating project configuration as trusted executable instructions.
+
 ## Local AI planning and patch drafting
 The plan command sends only issue title, body and labels to a local Ollama endpoint bound to loopback. The planner requests a JSON-schema-constrained plan, validates every field and blocks HTTP redirects.
 
@@ -37,7 +43,7 @@ A successful local pipeline status means only that its configured checks passed.
 
 ## Planned next stages
 - Manager: orchestration, budgets, state, policy enforcement and approval queue.
-- Researcher: adapters for additional original boards; verify task scope, claim rules and payout evidence.
+- Researcher: source-specific discovery and execution adapters for boards with verified official feeds or approved APIs; Bounty discovery is read-only until explicit operator approval gates are designed for bids and claims.
 - QA: project-specific dependency preparation, tests, static analysis and secret scanning.
 - Delivery: draft PR/submission; human approval before external publication.
 - Finance ledger: gross reward, fees, acceptance, actual payout and payout latency.
@@ -52,4 +58,4 @@ After merge to the default branch, a GitHub Actions workflow runs the public rea
 A local SQLite task_outcomes table tracks claimed, in-progress, submitted, accepted, rejected and paid states with cumulative hours, actual gross receipts, fees, timestamps and notes. Transitions are constrained; only a paid record with a real gross amount contributes to earnings. Reports calculate acceptance rate and realized net/hour using paid-task hours, separately from hours spent on unpaid work.
 
 ## Metrics
-Track qualified opportunities, estimated value/hour, verified submissions, acceptance rate, gross rewards, fees, net paid rewards and payout latency. Listed rewards are not earnings.
+Track qualified opportunities, GitHub-issue-compatible links, adapter backlog, verified submissions, acceptance rate, gross rewards, fees, net paid rewards and payout latency. Listed rewards are not earnings.

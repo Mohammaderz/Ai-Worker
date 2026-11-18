@@ -1,15 +1,19 @@
 import argparse
 import json
+import os
 from pathlib import Path
 
 from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
 from ai_worker.report import write_report
+from ai_worker.repo_profile import profile_repository
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
+from ai_worker.sources.registry import filter_sources, source_report
+from ai_worker.sources.trybounty import BountyAPIError, fetch_open_bounties
 from ai_worker.storage import connect, outcome_summary, record_outcome, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 
@@ -17,6 +21,9 @@ from ai_worker.workspace import WorkspaceError, clone_public_github_repo
 def main() -> int:
     parser = argparse.ArgumentParser(prog="ai-worker")
     sub = parser.add_subparsers(dest="command", required=True)
+
+    profile = sub.add_parser("profile", help="Inspect a repository and recommend safe QA checks")
+    profile.add_argument("--workspace", required=True)
 
     inspect = sub.add_parser("inspect")
     inspect.add_argument("--url", required=True)
@@ -75,11 +82,21 @@ def main() -> int:
     ledger_report = ledger_sub.add_parser("report")
     ledger_report.add_argument("--db", default="data/ai_worker.sqlite3")
 
+    bounty = sub.add_parser("bounty", help="Read-only access to the official Bounty Agent marketplace")
+    bounty_sub = bounty.add_subparsers(dest="bounty_command", required=True)
+    bounty_scan = bounty_sub.add_parser("scan", help="List open Bounties; never bids or claims")
+    bounty_scan.add_argument("--limit", type=int, default=100)
+    bounty_scan.add_argument("--output", default="reports/bounty-open.json")
+
+    sources = sub.add_parser("sources", help="List observed Jobbi boards, direct APIs, and manual-only marketplaces")
+    sources.add_argument("--limit", type=int, default=1000)
+
     scan = sub.add_parser("scan")
     scan.add_argument("--limit", type=int, default=100)
     scan.add_argument("--min-reward", type=float, default=5.0)
     scan.add_argument("--db", default="data/ai_worker.sqlite3")
     scan.add_argument("--output", default="reports/latest.md")
+    scan.add_argument("--source", action="append", default=[], help="Marketplace key; repeat to select multiple. Default: all indexed sources.")
 
     sandbox = sub.add_parser("sandbox")
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
@@ -91,6 +108,28 @@ def main() -> int:
     sandbox_run.add_argument("task_command", nargs=argparse.REMAINDER)
 
     args = parser.parse_args()
+    if args.command == "bounty" and args.bounty_command == "scan":
+        try:
+            items = fetch_open_bounties(os.environ.get("BOUNTY_AGENT_API_KEY", ""), limit=args.limit)
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps([item.to_dict() for item in items], ensure_ascii=False, indent=2), encoding="utf-8")
+        except (BountyAPIError, OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(f"Open Bounties fetched: {len(items)} | Report: {output}")
+        print("Read-only scan completed. No bids, claims, messages, or submissions were made.")
+        return 0
+
+    if args.command == "profile":
+        try:
+            result = profile_repository(args.workspace)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}")
+            return 2
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+
     if args.command == "inspect":
         try:
             brief = inspect_github_issue(args.url)
@@ -222,17 +261,21 @@ def main() -> int:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
-    if args.command == "scan":
+    if args.command in {"scan", "sources"}:
         try:
             gigs = fetch_gigs(args.limit)
         except FeedError as exc:
             print(f"ERROR: {exc}")
             return 2
+        if args.command == "sources":
+            print(json.dumps(source_report(gigs), ensure_ascii=False, indent=2))
+            return 0
+        selected_gigs = filter_sources(gigs, args.source)
         db = connect(args.db)
         try:
             upsert_gigs(db, gigs)
             ranked, rejected = [], 0
-            for gig in gigs:
+            for gig in selected_gigs:
                 ok, score, reasons = evaluate(gig, args.min_reward)
                 if ok:
                     ranked.append((gig, score, reasons))
@@ -242,7 +285,7 @@ def main() -> int:
             report = write_report(ranked, args.output)
         finally:
             db.close()
-        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
+        print(f"Fetched: {len(gigs)} | Sources selected: {len(selected_gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
         print(f"Report: {report}")
         return 0
 
