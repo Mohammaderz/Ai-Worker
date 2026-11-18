@@ -6,13 +6,24 @@ from ai_worker.developer import PatchError, apply_patch_in_sandbox, draft_patch
 from ai_worker.economics import source_priority_adjustments
 from ai_worker.planner import OllamaError, plan_github_issue
 from ai_worker.pipeline import PipelineError, resolve_eligible_gig, run_pipeline
+from ai_worker.portfolio import select_portfolio
 from ai_worker.report import write_report
 from ai_worker.sandbox import DEFAULT_IMAGE, SandboxError, run_in_sandbox
 from ai_worker.scoring import evaluate
 from ai_worker.sources.github_issue import GitHubIssueError, inspect_github_issue
 from ai_worker.sources.jobbi import FeedError, fetch_gigs
-from ai_worker.storage import connect, outcome_summary, record_outcome, source_performance, upsert_gigs
+from ai_worker.storage import active_task_count, connect, outcome_summary, record_outcome, source_performance, upsert_gigs
 from ai_worker.workspace import WorkspaceError, clone_public_github_repo
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 def main() -> int:
@@ -81,6 +92,8 @@ def main() -> int:
     scan.add_argument("--min-reward", type=float, default=5.0)
     scan.add_argument("--db", default="data/ai_worker.sqlite3")
     scan.add_argument("--output", default="reports/latest.md")
+    scan.add_argument("--max-opportunities", type=_positive_int, default=5)
+    scan.add_argument("--max-active", type=_positive_int, default=5)
 
     sandbox = sub.add_parser("sandbox")
     sandbox_sub = sandbox.add_subparsers(dest="sandbox_command", required=True)
@@ -249,10 +262,15 @@ def main() -> int:
                 else:
                     rejected += 1
             ranked.sort(key=lambda row: row[1], reverse=True)
-            report = write_report(ranked, args.output, source_history=history)
+            active = active_task_count(db)
+            portfolio = select_portfolio(
+                ranked, limit=args.max_opportunities,
+                active_count=active, max_active=args.max_active,
+            )
+            report = write_report(portfolio, args.output, source_history=history)
         finally:
             db.close()
-        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Filtered: {rejected}")
+        print(f"Fetched: {len(gigs)} | Qualified: {len(ranked)} | Active: {active}/{args.max_active} | Selected: {len(portfolio)} | Filtered: {rejected}")
         print(f"Report: {report}")
         return 0
 

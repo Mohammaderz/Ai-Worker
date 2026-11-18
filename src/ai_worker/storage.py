@@ -215,6 +215,15 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
     )
 
 
+
+def active_task_count(db: sqlite3.Connection) -> int:
+    """Count work already committed to by the user/agent workflow."""
+    row = db.execute(
+        "SELECT COUNT(*) FROM task_outcomes WHERE status IN ('claimed','in_progress','submitted','accepted')"
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
 def outcome_summary(db: sqlite3.Connection) -> dict:
     from datetime import datetime
     from statistics import median
