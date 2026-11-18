@@ -17,14 +17,15 @@ def source_priority_adjustments(source_history: list[dict]) -> dict[str, float]:
         if item.get("confidence") == "usable"
         and item.get("submitted_tasks", 0) >= 3
         and item.get("paid_tasks", 0) >= 2
-        and isinstance(item.get("net_per_paid_hour"), (int, float))
-        and math.isfinite(item["net_per_paid_hour"])
-        and item["net_per_paid_hour"] > 0
+        and item.get("hours_coverage") == 1.0
+        and isinstance(item.get("net_per_tracked_hour"), (int, float))
+        and math.isfinite(item["net_per_tracked_hour"])
+        and item["net_per_tracked_hour"] > 0
     ]
     if not usable:
         return {}
 
-    baseline = median(item["net_per_paid_hour"] for item in usable)
+    baseline = median(item["net_per_tracked_hour"] for item in usable)
     adjustments: dict[str, float] = {}
     for item in usable:
         acceptance = item.get("acceptance_rate")
@@ -33,7 +34,7 @@ def source_priority_adjustments(source_history: list[dict]) -> dict[str, float]:
             if isinstance(acceptance, (int, float)) and math.isfinite(acceptance)
             else 0.0
         )
-        hourly_ratio = (item["net_per_paid_hour"] + 1) / (baseline + 1)
+        hourly_ratio = (item["net_per_tracked_hour"] + 1) / (baseline + 1)
         hourly_points = max(-4.0, min(4.0, 2 * math.log2(hourly_ratio)))
         delay = item.get("average_payout_days")
         delay_points = (

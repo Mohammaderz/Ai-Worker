@@ -84,7 +84,7 @@ def record_outcome(
     if not isinstance(status, str) or status not in OUTCOME_TRANSITIONS:
         raise ValueError("Unknown outcome status")
     for label, value, allow_zero in (
-        ("actual_hours", actual_hours, False),
+        ("actual_hours", actual_hours, True),
         ("gross_received", gross_received, True),
         ("fees", fees, True),
     ):
@@ -143,7 +143,12 @@ def record_outcome(
 
 
 def source_performance(db: sqlite3.Connection) -> list[dict]:
-    """Summarize realized outcomes by source; never treat listed rewards as income."""
+    """Summarize realized outcomes by source; never treat listed rewards as income.
+
+    All-task net/hour includes paid and unpaid attempts. It is emitted only
+    when every tracked task has an explicit hours value. Paid-task net/hour is
+    a conditional diagnostic and is not overall source productivity.
+    """
     from datetime import datetime
     from collections import defaultdict
 
@@ -166,6 +171,10 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
         paid = [r for r in items if r[0] == "paid"]
         gross = sum(float(r[2] or 0) for r in paid)
         fees = sum(float(r[3] or 0) for r in paid)
+        recorded_hours = [r for r in items if r[1] is not None]
+        recorded_task_hours = sum(float(r[1]) for r in recorded_hours)
+        hours_complete = bool(items) and len(recorded_hours) == len(items)
+        hours_coverage = len(recorded_hours) / len(items) if items else 0.0
         paid_hours = sum(float(r[1] or 0) for r in paid)
         latencies = []
         for row in paid:
@@ -178,16 +187,26 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
                     pass
         acceptance_rate = len(accepted) / len(submitted) if submitted else None
         net = gross - fees
-        # Do not infer a source preference from tiny samples.
+        net_per_tracked_hour = (
+            round(net / recorded_task_hours, 2)
+            if hours_complete and recorded_task_hours > 0 else None
+        )
+        net_per_paid_hour = round(net / paid_hours, 2) if paid_hours > 0 else None
+
+        # Do not infer a source preference from tiny samples or incomplete time data.
         if len(submitted) < 3 or len(paid) < 2:
             confidence = "insufficient_data"
             guidance = "Collect at least 3 submissions and 2 actual payments before adapting source priority."
+        elif not hours_complete:
+            confidence = "incomplete_time_data"
+            guidance = "Record cumulative hours for every tracked task, including unpaid/rejected attempts, before adapting source priority."
         elif acceptance_rate is not None and acceptance_rate >= 0.6 and net > 0:
             confidence = "usable"
             guidance = "Positive observed results; keep monitoring before increasing exposure."
         else:
             confidence = "usable"
             guidance = "Observed results are weak or mixed; inspect rejection reasons and payout friction."
+
         results.append({
             "source": source,
             "tracked_tasks": len(items),
@@ -198,8 +217,12 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
             "gross_received": round(gross, 2),
             "fees": round(fees, 2),
             "net_received": round(net, 2),
+            "hours_recorded_tasks": len(recorded_hours),
+            "hours_coverage": round(hours_coverage, 3),
+            "tracked_task_hours": round(recorded_task_hours, 2),
+            "net_per_tracked_hour": net_per_tracked_hour,
             "paid_task_hours": round(paid_hours, 2),
-            "net_per_paid_hour": round(net / paid_hours, 2) if paid_hours else None,
+            "net_per_paid_hour": net_per_paid_hour,
             "average_payout_days": round(sum(latencies) / len(latencies), 2) if latencies else None,
             "confidence": confidence,
             "guidance": guidance,
@@ -208,12 +231,11 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
         results,
         key=lambda item: (
             item["confidence"] == "usable",
-            item["net_per_paid_hour"] if item["net_per_paid_hour"] is not None else -1,
+            item["net_per_tracked_hour"] if item["net_per_tracked_hour"] is not None else -1,
             item["net_received"],
         ),
         reverse=True,
     )
-
 
 def outcome_summary(db: sqlite3.Connection) -> dict:
     from datetime import datetime
@@ -231,7 +253,13 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
     gross = sum(float(row[2] or 0) for row in paid)
     fees = sum(float(row[3] or 0) for row in paid)
     hours = sum(float(row[1] or 0) for row in rows)
+    hours_recorded_tasks = sum(1 for row in rows if row[1] is not None)
+    hours_coverage = round(hours_recorded_tasks / len(rows), 3) if rows else None
     paid_hours = sum(float(row[1] or 0) for row in paid)
+    net_per_tracked_hour = (
+        round((gross - fees) / hours, 2)
+        if rows and hours_recorded_tasks == len(rows) and hours > 0 else None
+    )
     payout_latencies = []
     for row in paid:
         if row[4] and row[5]:
@@ -256,11 +284,14 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
         "fees": round(fees, 2),
         "net_received": round(gross - fees, 2),
         "tracked_hours_all_tasks": round(hours, 2),
+        "hours_recorded_tasks": hours_recorded_tasks,
+        "hours_coverage": hours_coverage,
+        "net_received_per_tracked_hour": net_per_tracked_hour,
         "paid_task_hours": round(paid_hours, 2),
         "net_received_per_paid_hour": round((gross - fees) / paid_hours, 2) if paid_hours else None,
         "payout_latency_sample_size": len(payout_latencies),
         "average_payout_latency_days": round(sum(payout_latencies) / len(payout_latencies), 2) if payout_latencies else None,
         "median_payout_latency_days": round(median(payout_latencies), 2) if payout_latencies else None,
         "by_source": source_performance(db),
-        "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded.",
+        "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded. All-task net/hour requires complete hours coverage; paid-task net/hour is conditional.",
     }

@@ -41,6 +41,9 @@ def test_only_actual_paid_amounts_count_as_earnings(tmp_path):
     assert summary["fees"] == 1.5
     assert summary["net_received"] == 23.5
     assert summary["net_received_per_paid_hour"] == 11.75
+    assert summary["hours_recorded_tasks"] == 1
+    assert summary["hours_coverage"] == 1.0
+    assert summary["net_received_per_tracked_hour"] == 11.75
     assert summary["acceptance_rate"] == 1.0
     assert summary["payout_latency_sample_size"] == 1
     assert summary["average_payout_latency_days"] is not None
@@ -200,6 +203,10 @@ def test_source_economics_uses_only_realized_outcomes_and_requires_sample_size(t
     assert source["fees"] == 3
     assert source["net_received"] == 62
     assert source["paid_task_hours"] == 6
+    assert source["hours_recorded_tasks"] == 3
+    assert source["hours_coverage"] == 1.0
+    assert source["tracked_task_hours"] == 7
+    assert source["net_per_tracked_hour"] == pytest.approx(62 / 7, abs=0.01)
     assert source["net_per_paid_hour"] == pytest.approx(62 / 6, abs=0.01)
     assert source["confidence"] == "usable"
 
@@ -225,3 +232,54 @@ def test_omitted_fee_update_preserves_recorded_fee_and_explicit_zero_clears_it(t
     assert corrected["fees"] == 0
     assert corrected["net_received"] == 25
     db.close()
+
+
+
+def test_source_hourly_metric_is_suppressed_when_any_tracked_task_lacks_hours(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    upsert_gigs(db, [
+        Gig(
+            id=f"board:{number}",
+            title=f"Fix Python issue {number}",
+            url=f"https://github.com/acme/project/issues/{number}",
+            source="board",
+            currency="USD",
+            reward_amount=25,
+            raw={},
+        )
+        for number in (1, 2, 3)
+    ])
+    for gig_id, hours, gross in (
+        ("board:1", 2.0, 25),
+        ("board:2", 3.0, 30),
+    ):
+        record_outcome(db, gig_id, "claimed")
+        record_outcome(db, gig_id, "in_progress", actual_hours=hours)
+        record_outcome(db, gig_id, "submitted")
+        record_outcome(db, gig_id, "accepted")
+        record_outcome(db, gig_id, "paid", gross_received=gross, fees=1)
+    record_outcome(db, "board:3", "claimed")
+    record_outcome(db, "board:3", "in_progress")
+    record_outcome(db, "board:3", "submitted")
+    record_outcome(db, "board:3", "rejected")
+
+    source = next(item for item in outcome_summary(db)["by_source"] if item["source"] == "board")
+    db.close()
+
+    assert source["hours_recorded_tasks"] == 2
+    assert source["hours_coverage"] == pytest.approx(2 / 3, abs=0.001)
+    assert source["net_per_tracked_hour"] is None
+    assert source["net_per_paid_hour"] == pytest.approx(53 / 5, abs=0.01)
+    assert source["confidence"] == "incomplete_time_data"
+
+
+def test_zero_actual_hours_is_valid_and_counts_as_recorded(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    seed(db)
+    record_outcome(db, "board:task-1", "claimed", actual_hours=0)
+    summary = outcome_summary(db)
+    db.close()
+
+    assert summary["hours_recorded_tasks"] == 1
+    assert summary["hours_coverage"] == 1.0
+    assert summary["net_received_per_tracked_hour"] is None

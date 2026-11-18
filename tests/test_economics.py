@@ -8,7 +8,8 @@ def sample(source, *, acceptance, net_hour, delay=5):
         "paid_tasks": 2,
         "confidence": "usable",
         "acceptance_rate": acceptance,
-        "net_per_paid_hour": net_hour,
+        "hours_coverage": 1.0,
+        "net_per_tracked_hour": net_hour,
         "average_payout_days": delay,
     }
 
@@ -31,6 +32,12 @@ def test_realized_economics_adjust_ranking_without_becoming_a_gate():
     adjustments = source_priority_adjustments(history)
     assert adjustments["reliable"] > adjustments["slow"]
     assert all(-8 <= value <= 8 for value in adjustments.values())
+
+
+def test_incomplete_time_coverage_never_changes_opportunity_ranking():
+    history = [sample("missing-hours", acceptance=1.0, net_hour=100)]
+    history[0]["hours_coverage"] = 2 / 3
+    assert source_priority_adjustments(history) == {}
 
 
 def test_zero_or_invalid_realized_hourly_rate_is_ignored():

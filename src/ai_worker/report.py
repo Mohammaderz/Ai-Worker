@@ -32,9 +32,13 @@ def write_report(
                 f"{item['acceptance_rate']:.0%}"
                 if item["acceptance_rate"] is not None else "n/a"
             )
-            net_hour = (
-                f"${item['net_per_paid_hour']:.2f}/paid hour"
-                if item["net_per_paid_hour"] is not None else "n/a"
+            tracked_hour = (
+                f"USD {item['net_per_tracked_hour']:.2f}/tracked hour"
+                if item.get("net_per_tracked_hour") is not None else "n/a (incomplete hours or zero total hours)"
+            )
+            paid_hour = (
+                f"USD {item['net_per_paid_hour']:.2f}/paid-task hour"
+                if item.get("net_per_paid_hour") is not None else "n/a"
             )
             lines += [
                 f"### {item['source']}",
@@ -42,7 +46,9 @@ def write_report(
                 f"- Tracked / submitted / accepted / paid: {item['tracked_tasks']} / {item['submitted_tasks']} / {item['accepted_tasks']} / {item['paid_tasks']}",
                 f"- Observed acceptance rate: {acceptance}",
                 f"- Actual net received: ${item['net_received']:.2f}",
-                f"- Realized net per paid-task hour: {net_hour}",
+                f"- Hours recorded: {item['hours_recorded_tasks']}/{item['tracked_tasks']} tasks ({item['hours_coverage']:.0%})",
+                f"- Realized net per tracked task hour (includes unpaid/rejected attempts): {tracked_hour}",
+                f"- Conditional net per paid-task hour: {paid_hour}",
                 f"- Average payout delay: {item['average_payout_days'] if item['average_payout_days'] is not None else 'n/a'} days",
                 f"- Evidence confidence: {item['confidence']}",
                 f"- Guidance: {item['guidance']}",
