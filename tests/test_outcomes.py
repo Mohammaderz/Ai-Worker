@@ -283,3 +283,44 @@ def test_zero_actual_hours_is_valid_and_counts_as_recorded(tmp_path):
     assert summary["hours_recorded_tasks"] == 1
     assert summary["hours_coverage"] == 1.0
     assert summary["net_received_per_tracked_hour"] is None
+
+
+def test_paid_task_hourly_metric_is_suppressed_when_any_paid_task_lacks_hours(tmp_path):
+    db = connect(tmp_path / "ledger.sqlite3")
+    upsert_gigs(db, [
+        Gig(
+            id=f"board:{number}",
+            title=f"Fix Python issue {number}",
+            url=f"https://github.com/acme/project/issues/{number}",
+            source="board",
+            currency="USD",
+            reward_amount=25,
+            raw={},
+        )
+        for number in (1, 2)
+    ])
+
+    record_outcome(db, "board:1", "claimed")
+    record_outcome(db, "board:1", "in_progress", actual_hours=2.0)
+    record_outcome(db, "board:1", "submitted")
+    record_outcome(db, "board:1", "accepted")
+    record_outcome(db, "board:1", "paid", gross_received=25, fees=1)
+
+    record_outcome(db, "board:2", "claimed")
+    record_outcome(db, "board:2", "in_progress")
+    record_outcome(db, "board:2", "submitted")
+    record_outcome(db, "board:2", "accepted")
+    record_outcome(db, "board:2", "paid", gross_received=30, fees=1)
+
+    summary = outcome_summary(db)
+    source = next(item for item in summary["by_source"] if item["source"] == "board")
+    db.close()
+
+    assert summary["paid_task_hours"] == 2.0
+    assert summary["paid_hours_recorded_tasks"] == 1
+    assert summary["paid_hours_coverage"] == 0.5
+    assert summary["net_received_per_paid_hour"] is None
+    assert source["paid_hours_recorded_tasks"] == 1
+    assert source["paid_hours_coverage"] == 0.5
+    assert source["paid_hours_complete"] is False
+    assert source["net_per_paid_hour"] is None

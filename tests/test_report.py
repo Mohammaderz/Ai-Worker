@@ -8,6 +8,8 @@ def test_report_discloses_incomplete_all_task_hours_and_paid_task_rate(tmp_path)
         "submitted_tasks": 2,
         "accepted_tasks": 1,
         "paid_tasks": 1,
+        "paid_hours_recorded_tasks": 1,
+        "paid_hours_coverage": 1.0,
         "net_received": 20.0,
         "net_per_tracked_hour": None,
         "net_per_paid_hour": 12.0,
@@ -23,6 +25,7 @@ def test_report_discloses_incomplete_all_task_hours_and_paid_task_rate(tmp_path)
     report = path.read_text(encoding="utf-8")
 
     assert "Hours recorded: 2/3 tasks (67%)" in report
+    assert "Paid-task hours recorded: 1/1 paid tasks (100%)" in report
     assert (
         "Realized net per tracked task hour (includes unpaid/rejected attempts): "
         "n/a (incomplete hours or zero total hours)"

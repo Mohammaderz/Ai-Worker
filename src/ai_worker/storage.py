@@ -145,9 +145,9 @@ def record_outcome(
 def source_performance(db: sqlite3.Connection) -> list[dict]:
     """Summarize realized outcomes by source; never treat listed rewards as income.
 
-    All-task net/hour includes paid and unpaid attempts. It is emitted only
-    when every tracked task has an explicit hours value. Paid-task net/hour is
-    a conditional diagnostic and is not overall source productivity.
+    All-task net/hour includes paid and unpaid attempts and requires hours for
+    every tracked task. Conditional paid-task net/hour requires hours for every
+    paid task; incomplete paid-task hours are reported as coverage, not zero.
     """
     from datetime import datetime
     from collections import defaultdict
@@ -175,7 +175,9 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
         recorded_task_hours = sum(float(r[1]) for r in recorded_hours)
         hours_complete = bool(items) and len(recorded_hours) == len(items)
         hours_coverage = len(recorded_hours) / len(items) if items else 0.0
-        paid_hours = sum(float(r[1] or 0) for r in paid)
+        paid_hours_recorded = [r for r in paid if r[1] is not None]
+        paid_hours_complete = bool(paid) and len(paid_hours_recorded) == len(paid)
+        paid_hours = sum(float(r[1]) for r in paid_hours_recorded)
         latencies = []
         for row in paid:
             if row[4] and row[6]:
@@ -191,7 +193,10 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
             round(net / recorded_task_hours, 2)
             if hours_complete and recorded_task_hours > 0 else None
         )
-        net_per_paid_hour = round(net / paid_hours, 2) if paid_hours > 0 else None
+        net_per_paid_hour = (
+            round(net / paid_hours, 2)
+            if paid_hours_complete and paid_hours > 0 else None
+        )
 
         # Do not infer a source preference from tiny samples or incomplete time data.
         if len(submitted) < 3 or len(paid) < 2:
@@ -222,6 +227,9 @@ def source_performance(db: sqlite3.Connection) -> list[dict]:
             "tracked_task_hours": round(recorded_task_hours, 2),
             "net_per_tracked_hour": net_per_tracked_hour,
             "paid_task_hours": round(paid_hours, 2),
+            "paid_hours_recorded_tasks": len(paid_hours_recorded),
+            "paid_hours_coverage": round(len(paid_hours_recorded) / len(paid), 3) if paid else None,
+            "paid_hours_complete": paid_hours_complete,
             "net_per_paid_hour": net_per_paid_hour,
             "average_payout_days": round(sum(latencies) / len(latencies), 2) if latencies else None,
             "confidence": confidence,
@@ -255,7 +263,12 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
     hours = sum(float(row[1] or 0) for row in rows)
     hours_recorded_tasks = sum(1 for row in rows if row[1] is not None)
     hours_coverage = round(hours_recorded_tasks / len(rows), 3) if rows else None
-    paid_hours = sum(float(row[1] or 0) for row in paid)
+    paid_hours_recorded_tasks = sum(1 for row in paid if row[1] is not None)
+    paid_hours_coverage = (
+        round(paid_hours_recorded_tasks / len(paid), 3) if paid else None
+    )
+    paid_hours_complete = bool(paid) and paid_hours_recorded_tasks == len(paid)
+    paid_hours = sum(float(row[1]) for row in paid if row[1] is not None)
     net_per_tracked_hour = (
         round((gross - fees) / hours, 2)
         if rows and hours_recorded_tasks == len(rows) and hours > 0 else None
@@ -288,10 +301,15 @@ def outcome_summary(db: sqlite3.Connection) -> dict:
         "hours_coverage": hours_coverage,
         "net_received_per_tracked_hour": net_per_tracked_hour,
         "paid_task_hours": round(paid_hours, 2),
-        "net_received_per_paid_hour": round((gross - fees) / paid_hours, 2) if paid_hours else None,
+        "paid_hours_recorded_tasks": paid_hours_recorded_tasks,
+        "paid_hours_coverage": paid_hours_coverage,
+        "net_received_per_paid_hour": (
+            round((gross - fees) / paid_hours, 2)
+            if paid_hours_complete and paid_hours > 0 else None
+        ),
         "payout_latency_sample_size": len(payout_latencies),
         "average_payout_latency_days": round(sum(payout_latencies) / len(payout_latencies), 2) if payout_latencies else None,
         "median_payout_latency_days": round(median(payout_latencies), 2) if payout_latencies else None,
         "by_source": source_performance(db),
-        "note": "Only amounts manually recorded as paid count as earnings; advertised bounty values are excluded. All-task net/hour requires complete hours coverage; paid-task net/hour is conditional.",
+        "note": "Only manually recorded receipts count as earnings. All-task net/hour requires complete tracked-task hours; conditional paid-task net/hour requires complete paid-task hours. Missing hours are never treated as zero.",
     }
