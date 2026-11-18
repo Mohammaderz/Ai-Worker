@@ -218,14 +218,14 @@ This section supersedes earlier PR/CI snapshots above where values differ.
 ### Verified GitHub state
 - Repository default branch is still `main`; current `main` SHA is `6f89b6dca43ba635e53ec9b2281a7e03814034fa`. No audited PR has been merged; `main` is unchanged.
 - Open PR queue: #5–#30 (26 open PRs). This is not an integration-ready state; do not bulk-merge or create more small stacked PRs.
-- **PR #5** remains open and ready for review, base `main`, head `0df6b02765632c57fa7444f0185f01b1661b54bc`. Exact-head run #396 succeeded; `pytest -q`: 91 passed.
+- **PR #5** remains open and ready for review. Its last code-bearing head `0df6b02765632c57fa7444f0185f01b1661b54bc` passed exact-head run #396 (91 tests). Later commits on this branch are documentation-only checkpoints; no new workflow run was observed for them.
 - **PR #6** remains open and draft, base `main`, head `bcf9bd6371a82e20b478fb96aa762ec1a01971b3`. Exact-head run #44309404263 succeeded; `pytest -q`: 94 passed; Docker Python/Node image builds and all sandbox smoke steps passed.
   - Commit `ea347ca85cd10ba93836024ec0be7263b8cd3478` removed the unsupported daily $5–$10 target from the PR #6 README.
   - Commit `bcf9bd6371a82e20b478fb96aa762ec1a01971b3` corrected source hourly economics to include unpaid/rejected task hours when time coverage is complete.
 - **PR #7** remains open and draft, stacked on #6. Its base SHA `9298e964c445ae6c1e1506ec7d07b1fabdbe7e0b` is behind current PR #6 head `bcf9bd6...`; GitHub currently reports it not mergeable. Synchronize only with a normal forward update and rerun exact-head CI; do not force-push.
 - **PR #8** remains open and ready for review, targeting `main`; its previously recorded exact-head run #389 passed. Recheck before any integration.
 - **PR #9** remains open/draft, targeting `main`; current tracker branch head `acf41f3d02d6a0d8b2effaad056fc3448b3a7bd5`; exact-head run #597 passed.
-- **PR #10** remains open/draft, stacked on PR #5 at base SHA `0df6b02765632c57fa7444f0185f01b1661b54bc`; head `f2ed29b08b53537e31037efd6699a9c09170fefc`; exact-head run #596 passed.
+- **PR #10** remains open/draft, stacked on PR #5 at base SHA `0df6b02765632c57fa7444f0185f01b1661b54bc`; head `f2ed29b08b53537e31037efd6699a9c09170fefc`; exact-head run #596 passed. The PR #5 branch has since advanced with documentation-only commits, so GitHub now reports #10 not mergeable until its base is synchronized.
 - **PR #11** is based on `product/competitive-roadmap`, which is not represented by a parent PR in the current open queue. Resolve its ancestry before integrating it.
 - **PRs #12–#30** form a long reviewer/security-analysis chain. Latest current-head CI runs checked for these PRs succeeded; some intermediate historical commits had failed attempts. #28 and #29 are parallel children of #27; #30 extends #29. Do not bulk-retarget or merge this chain.
 - Changed-file overlap is material: #5/#6 overlap in README, architecture, CLI and storage; #6/#7 overlap in CLI and storage; #8/#11 overlap in CLI, pipeline and pipeline tests; #10/#11 overlap in architecture and reviewer code. Review each combined diff, not each PR in isolation.
@@ -258,3 +258,10 @@ This section supersedes earlier PR/CI snapshots above where values differ.
 5. Keep external claims, bids, messages, submissions, deployments, merges to `main`, spending and payment actions behind explicit user approval.
 
 No real task has been submitted, accepted or paid as a result of this audit.
+
+
+## 13. Documentation-only branch movement after the 2026-11-18 audit
+- The operator-playbook refresh was committed on PR #5's branch as `d1ca5bbf47d1e24dcd4405fad2079bd0680fe58d`. It changes documentation only. No CI run was observed for that docs-only commit; the last code-bearing head `0df6b02765632c57fa7444f0185f01b1661b54bc` had 91 passing tests.
+- This checkpoint itself is another documentation-only PR #5 branch update. PR #10 still has base SHA `0df6b02765632c57fa7444f0185f01b1661b54bc`, so it will remain behind the current PR #5 branch until synchronized. **Do not add further commits to PR #5 until PR #10's base is synchronized**, unless a critical correction is required.
+- PR #9's tracker refresh is documentation-only commit `ad77787d2c55cffea1c7f5c196c9d92f7cb94ec7`; no CI run was observed for that docs-only commit.
+- PR #6 remains at code head `bcf9bd6371a82e20b478fb96aa762ec1a01971b3` with successful run #44309404263 (94 passed). PR #7 remains behind that base and not mergeable.
