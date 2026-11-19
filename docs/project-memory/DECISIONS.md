@@ -21,6 +21,10 @@
 - Listed rewards are not earnings; only actual paid receipts are income (`README.md`).
 - Keep the system local-first and bounded while improving safety and evidence (`docs/COMPETITIVE_ROADMAP.md`).
 
+## Stage A formal acceptance — recorded 2026-11-19
+
+- **OWNER DECISION / RECORDED 2026-11-19 (updated 2026-11-19):** The project owner formally accepted Stage A under PDF v2.4 after reviewing the final evidence package. Owner confirmed SA-29 and the final Trivy scan as PASS based on recorded Exit Codes zero and final report hashes. **Stage B is explicitly PAUSED by owner**: no Stage B execution, tests, builds or implementation until a new explicit owner instruction. Stages C-E NOT STARTED. **Push:** the owner's current explicit authorization covers only this preservation package (PDF v2.5 + memory sync); any future push requires separate explicit authorization. No acceptance was issued by the agent. Evidence: `/private/tmp/ai-worker-stage-a-owner-acceptance.HytFuA/OWNER-ACCEPTANCE-RECORD.md`, `/private/tmp/ai-worker-final-stage-a-evidence-review.7NAviG/FINAL-EVIDENCE-REVIEW.md`. Accepted HEAD: `73ff4fd5f97ec45ce39df57db2f68fd7b07f15c7`.
+
 ## Open decisions
 
 - How should plan dependencies be represented and versioned while retaining compatibility with existing plan JSON and callers?

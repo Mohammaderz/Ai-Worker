@@ -2,6 +2,10 @@
 
 **Prepared:** 2026-11-17. **Purpose:** resume work without losing the current repository and user constraints.
 
+## Stage A acceptance / Stage B paused — 2026-11-19
+
+**Updated 2026-11-19:** The owner formally accepted Stage A under PDF v2.4; SA-29 and final Trivy were confirmed PASS from recorded evidence. **Stage B is explicitly PAUSED by owner** — no Stage B execution, tests or builds until a new explicit owner instruction. Stages C-E NOT STARTED. **Push:** the owner's current authorization is limited to this preservation package only; any future push requires separate explicit authorization. Accepted HEAD `73ff4fd5f97ec45ce39df57db2f68fd7b07f15c7`. Records: `/private/tmp/ai-worker-stage-a-owner-acceptance.HytFuA/OWNER-ACCEPTANCE-RECORD.md` and `/private/tmp/ai-worker-final-stage-a-evidence-review.7NAviG/FINAL-EVIDENCE-REVIEW.md`. These entries record decisions only; no Stage B work was started.
+
 ## Latest engineering checkpoint — 2026-11-17
 
 **VERIFIED Git:** branch `eng/deterministic-acceptance-gate-20261117`, HEAD `b190057d3a790ac1690f953af75751aeed65aea2`. The recovery branch `backup/pre-live-ollama-debug-20261117-040907Z` still resolves to `b190057d3a790ac1690f953af75751aeed65aea2`. Current edits remain unstaged/uncommitted. No commit or push was performed. Inspect status and diffs before further work.

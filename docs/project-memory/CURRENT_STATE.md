@@ -2,6 +2,10 @@
 
 **Observed:** 2026-11-17, working directory `/Users/mohmmadrza/AI-Worker`. **Confidence:** high for Git observations at that moment.
 
+## Stage A formally accepted by owner — 2026-11-19 (supersedes older stage status)
+
+**OWNER DECISION (updated 2026-11-19):** Stage A formally accepted under PDF v2.4; SA-29 and final Trivy confirmed PASS by owner (recorded Exit Codes zero and final report hashes). **Stage B explicitly PAUSED by owner**: no Stage B execution/tests/builds until a new explicit owner instruction. Stages C-E NOT STARTED. **Push:** current explicit owner authorization applies only to this preservation package; future pushes need separate authorization. No agent-issued acceptance. Accepted HEAD `73ff4fd5f97ec45ce39df57db2f68fd7b07f15c7`, branch `eng/deterministic-acceptance-gate-20261117`. Records: `/private/tmp/ai-worker-stage-a-owner-acceptance.HytFuA/OWNER-ACCEPTANCE-RECORD.md` and `/private/tmp/ai-worker-final-stage-a-evidence-review.7NAviG/FINAL-EVIDENCE-REVIEW.md`. No main AI-Worker development started.
+
 ## Latest verified checkpoint — 2026-11-17
 
 **VERIFIED Git state:** branch `eng/deterministic-acceptance-gate-20261117`; HEAD `b190057d3a790ac1690f953af75751aeed65aea2`. Recovery branch `backup/pre-live-ollama-debug-20261117-040907Z` resolves to the same SHA. No staged paths or untracked paths were present at the latest status check. Unstaged changes were the five project-memory files plus `src/ai_worker/{developer,pipeline,planner,reviewer}.py` and `tests/{test_patch_drafting,test_pipeline,test_planner,test_reviewer}.py`. No Node QA source/test file was changed. No commit or push was made during this milestone. Recheck all state before continuing.
